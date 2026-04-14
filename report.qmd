@@ -1,0 +1,43 @@
+---
+title: "Measuring MLB Catcher Defensive Contributions Through Pitch Framing"
+author: "Your Name"
+date: "Spring 2026"
+format: 
+  pdf:
+    toc: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+# Abstract
+
+# Introduction
+
+# Data
+
+## Data Sources
+
+## Preprocessing
+
+## Exploratory Data Analysis
+
+# Methods
+
+## Your Name: Pitch Framing via Mixed-Effects Logistic Regression
+
+# Results
+
+## Your Name: Framing Model Results
+
+# Discussion
+
+## Conclusions
+
+## Limitations
+
+## Future Work
+
+# References
+
