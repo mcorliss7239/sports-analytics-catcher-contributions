@@ -1,0 +1,660 @@
+---
+title: "36-460/660 Homework 2"
+author: "INSERT NAME HERE"
+date: 02/11/2026
+format: pdf
+---
+
+```{r}
+library(httr)
+library(tidyverse)
+
+# ── Load cached data if already pulled (comment out to re-run) ─────────────
+# sc_2025_raw      <- readRDS("statcast_2025_raw.rds")
+# bootstrap_framing <- readRDS("bootstrap_framing_100.rds")
+```
+
+```{r}
+# Pull data from Baseball Savant (skip if loading from RDS above) 
+build_savant_url <- function(start, end) {
+  paste0(
+    "https://baseballsavant.mlb.com/statcast_search/csv?all=true",
+    "&player_type=pitcher",
+    "&game_date_gt=", start,
+    "&game_date_lt=", end,
+    "&type=details",
+    "&hfSea=2025%7C",
+    "&game_type=R"
+  )
+}
+
+# 3-day windows
+breaks <- seq(as.Date("2025-03-27"), as.Date("2025-09-28"), by = "3 days")
+
+windows <- tibble(
+  start = breaks,
+  end   = c(breaks[-1] - 1, as.Date("2025-09-28"))
+)
+
+# Check how many chunks we'll be making
+nrow(windows)  # should be ~62 chunks
+
+pull_savant_chunk <- function(start, end, retries = 3) {
+  url <- build_savant_url(start, end)
+  tmp <- tempfile(fileext = ".csv")
+  
+  for (i in seq_len(retries)) {
+    resp <- tryCatch(
+      GET(url, write_disk(tmp, overwrite = TRUE),
+          timeout(300),
+          add_headers(
+            `User-Agent`      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            `Accept`          = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            `Accept-Language` = "en-US,en;q=0.5"
+          )),
+      error = function(e) { message("Attempt ", i, " failed: ", e$message); NULL }
+    )
+    
+    if (!is.null(resp) && status_code(resp) == 200) {
+      df <- read_csv(tmp, show_col_types = FALSE)
+      if ("pitch_type" %in% names(df)) {
+        message("Got ", nrow(df), " pitches: ", start, " – ", end)
+        return(df)
+      }
+    }
+    message("Retrying in 10s...")
+    Sys.sleep(10)
+  }
+  warning("All retries failed for ", start, " to ", end)
+  return(NULL)
+}
+```
+```{r}
+test <- pull_savant_chunk("2025-03-27", "2025-03-29")
+nrow(test)  # should be well under 25,000
+```
+
+```{r}
+sc_2025_raw <- pmap_dfr(windows, function(start, end) {
+  pull_savant_chunk(as.character(start), as.character(end))
+}) %>%
+  mutate(game_date = as.Date(game_date, origin = "1970-01-01"))
+```
+
+```{r}
+# Fix date column, verify, and save
+sc_2025_raw <- sc_2025_raw %>%
+  mutate(game_date = as.Date(game_date, origin = "1970-01-01"))
+
+cat("Total rows:", nrow(sc_2025_raw), "\n")
+cat("Columns:", ncol(sc_2025_raw), "\n")
+cat("Date range:", as.character(min(sc_2025_raw$game_date)),
+    "to", as.character(max(sc_2025_raw$game_date)), "\n")
+table(sc_2025_raw$description) |> sort(decreasing = TRUE) |> head(10)
+
+saveRDS(sc_2025_raw, "statcast_2025_raw.rds")
+```
+
+
+```{r}
+#https://www.mlb.com/glossary/statcast/catcher-framing
+
+#Catcher Framing Runs converts a catcher’s called strikes to runs saved on a .125 runs per strike basis.
+
+
+# Shadow zone threshold derived from MLB official sources:
+# Definition: one baseball width inside and outside the strike zone
+# Source: https://www.mlb.com/glossary/statcast/catcher-framing
+#
+# Baseball diameter from official circumference spec (pg 17):
+# Source: https://mktg.mlbstatic.com/mlb/official-information/2026-official-baseball-rules.pdf
+# Circumference: 9.000 to 9.250 inches
+# Diameter min: 9.000 / pi = 2.8648 inches = 0.23873 ft
+# Diameter max: 9.250 / pi = 2.9444 inches = 0.24537 ft
+# Diameter avg: (0.23873 + 0.24537) / 2 = 0.24205 ft
+
+shadow_threshold <- ((9.000 / pi) + (9.250 / pi)) / 2 / 12
+```
+
+```{r}
+shadow_2025 <- sc_2025_raw %>%
+  filter(
+    description %in% c("called_strike", "ball"),
+    !is.na(plate_x), !is.na(plate_z),
+    !is.na(sz_top),  !is.na(sz_bot),
+    !is.na(fielder_2)
+  ) %>%
+  mutate(
+    is_strike = as.integer(description == "called_strike"),
+    pz_norm   = (plate_z - sz_bot) / (sz_top - sz_bot),
+    dist_x    = pmin(abs(plate_x - 0.83), abs(plate_x + 0.83)),
+    dist_zt   = abs(plate_z - sz_top),
+    dist_zb   = abs(plate_z - sz_bot),
+    dist_edge = pmin(dist_x, dist_zt, dist_zb),
+    in_shadow = dist_edge <= shadow_threshold
+  ) %>%
+  filter(in_shadow) %>%
+  mutate(
+    catcher_id = as.factor(fielder_2),
+    pitcher_id = as.factor(pitcher),
+    batter_id  = as.factor(batter),
+    count      = as.factor(paste0(balls, "-", strikes)),
+    stand      = as.factor(stand),
+    p_throws   = as.factor(p_throws)
+  ) %>%
+  select(
+    game_date, game_pk,
+    pitcher_id, batter_id, catcher_id,
+    is_strike, plate_x, plate_z, pz_norm,
+    sz_top, sz_bot, dist_edge,
+    count, stand, p_throws
+  )
+```
+
+```{r}
+
+```
+
+```{r}
+cat("Shadow zone pitches:", nrow(shadow_2025), "\n")
+cat("Unique catchers:", n_distinct(shadow_2025$catcher_id), "\n")
+cat("Strike rate in shadow zone:", round(mean(shadow_2025$is_strike), 3), "\n")
+```
+
+```{r}
+shadow_2025 %>%
+  count(catcher_id, name = "n_pitches") %>%
+  summarise(
+    min    = min(n_pitches),
+    p25    = quantile(n_pitches, 0.25),
+    median = median(n_pitches),
+    p75    = quantile(n_pitches, 0.75),
+    max    = max(n_pitches)
+  )
+
+# Also see how many catchers survive a 200-pitch cutoff
+shadow_2025 %>%
+  count(catcher_id) %>%
+  filter(n >= 200) %>%
+  nrow()
+```
+
+```{r}
+eligible_catchers <- shadow_2025 %>%
+  count(catcher_id) %>%
+  filter(n >= 300) %>%
+  pull(catcher_id)
+
+shadow_model <- shadow_2025 %>%
+  filter(catcher_id %in% eligible_catchers) %>%
+  mutate(catcher_id = droplevels(catcher_id))
+
+cat("Pitches in model dataset:", nrow(shadow_model), "\n")
+cat("Catchers in model:", n_distinct(shadow_model$catcher_id), "\n")
+```
+
+```{r}
+library(lme4)
+
+framing_model <- glmer(
+  is_strike ~ plate_x + pz_norm + count + stand + p_throws +
+              (1 | catcher_id) + (1 | pitcher_id) + (1 | batter_id),
+  data   = shadow_model,
+  family = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa",
+                         optCtrl   = list(maxfun = 2e5))
+)
+
+summary(framing_model)
+```
+
+```{r}
+library(broom.mixed)
+library(lme4)
+
+# Step 1: nest at the game-plate appearance level
+# (game_pk + batter_id approximates a PA)
+game_pa <- shadow_model |>
+  group_by(game_pk, batter_id) |>
+  nest() |>
+  ungroup()
+
+# Step 2: bootstrap
+N_BOOT <- 100  # start with 100, can increase later
+
+# Set seed for reproducibility
+set.seed(460)
+
+bootstrap_framing <-
+  map_dfr(1:N_BOOT, function(boot_i) {
+    
+    # Resample PAs within games (preserves game structure)
+    boot_data <- game_pa |>
+      group_by(game_pk) |>
+      sample_n(n(), replace = TRUE) |>
+      ungroup() |>
+      unnest(cols = data)
+    
+    # Refit model on resampled data
+    boot_glmm <- glmer(
+      is_strike ~ plate_x + pz_norm + count + stand + p_throws +
+                  (1 | catcher_id) + (1 | pitcher_id) + (1 | batter_id),
+      data    = boot_data,
+      family  = binomial(link = "logit"),
+      control = glmerControl(optimizer = "bobyqa",
+                             optCtrl   = list(maxfun = 2e5))
+    )
+    
+    # Extract random effects
+    tidy(boot_glmm, effects = "ran_vals") |>
+      mutate(boot = boot_i)
+  })
+
+saveRDS(bootstrap_framing, "bootstrap_framing_100.rds")
+```
+
+```{r}
+library(ggplot2)
+
+# Create a 2D grid of called strike rate across plate location
+shadow_2025 %>%
+  mutate(
+    px_bin = round(plate_x / 0.1) * 0.1,
+    pz_bin = round(plate_z / 0.1) * 0.1
+  ) %>%
+  group_by(px_bin, pz_bin) %>%
+  summarise(
+    strike_rate = mean(is_strike),
+    n_pitches   = n(),
+    .groups = "drop"
+  ) %>%
+  filter(n_pitches >= 50) %>%  # remove sparse bins
+  ggplot(aes(x = px_bin, y = pz_bin, fill = strike_rate)) +
+  geom_tile() +
+  
+  # Strike zone box (average dimensions)
+  annotate("rect",
+           xmin = -0.83, xmax = 0.83,
+           ymin = 1.5,   ymax = 3.5,
+           fill = NA, color = "black", linewidth = 0.8) +
+  
+  # Shadow zone boundary
+  annotate("rect",
+         xmin = -(0.83 + shadow_threshold), xmax = (0.83 + shadow_threshold),
+         ymin = 1.5  - shadow_threshold,    ymax = 3.5  + shadow_threshold,
+         fill = NA, color = "white",
+         linewidth = 0.6, linetype = "dashed") +
+  
+  scale_fill_gradient2(
+    low      = "dodgerblue",
+    mid      = "white",
+    high     = "firebrick",
+    midpoint = 0.5,
+    name     = "Called strike rate"
+  ) +
+  
+  labs(
+    title    = "Called strike rate by pitch location (2025 shadow zone)",
+    subtitle = "Solid box = strike zone, dashed box = shadow zone boundary",
+    x        = "Horizontal position (ft, catcher's perspective)",
+    y        = "Vertical position (ft)"
+  ) +
+  
+  coord_fixed() +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+shadow_2025 %>%
+  count(catcher_id, name = "n_pitches") %>%
+  ggplot(aes(x = n_pitches)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+  
+  # Mark the 300 pitch cutoff
+  geom_vline(xintercept = 300, color = "firebrick",
+             linetype = "dashed", linewidth = 0.8) +
+  annotate("text", x = 320, y = Inf,
+           label = "300 pitch\nminimum",
+           hjust = 0, vjust = 1.5,
+           color = "firebrick", size = 3.5) +
+  
+  labs(
+    title    = "Shadow zone pitches per catcher (2025 season)",
+    subtitle = "111 total catchers; 89 meet the 300-pitch minimum",
+    x        = "Number of shadow zone pitches",
+    y        = "Number of catchers"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Build catcher summary from bootstrap output
+catcher_summary <- bootstrap_framing %>%
+  filter(group == "catcher_id") %>%
+  group_by(level) %>%
+  summarise(
+    estimate = median(estimate, na.rm = TRUE),
+    lower    = quantile(estimate, 0.05, na.rm = TRUE),
+    upper    = quantile(estimate, 0.95, na.rm = TRUE),
+    .groups  = "drop"
+  ) %>%
+  arrange(estimate) %>%
+  mutate(
+    level = fct_inorder(level),
+    sig   = lower > 0 | upper < 0
+  )
+
+# Caterpillar plot
+catcher_summary %>%
+  ggplot(aes(x = estimate, y = level, color = sig)) +
+  geom_errorbarh(aes(xmin = lower, xmax = upper),
+                 height = 0, alpha = 0.5, linewidth = 0.4) +
+  geom_point(size = 1.5) +
+  geom_vline(xintercept = 0, linetype = "dashed",
+             color = "black", linewidth = 0.5) +
+  scale_color_manual(
+    values = c("FALSE" = "gray50", "TRUE" = "firebrick"),
+    labels = c("FALSE" = "CI includes zero",
+               "TRUE"  = "Significantly different from zero"),
+    name   = NULL
+  ) +
+  labs(
+    title    = "Catcher framing random effects (2025 season)",
+    subtitle = "90% bootstrap confidence intervals; red = CI does not cross zero",
+    x        = "Framing random effect (log-odds scale)",
+    y        = NULL
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.y        = element_blank(),
+    axis.ticks.y       = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor   = element_blank(),
+    legend.position    = "bottom")
+```
+
+```{r}
+# Source: https://www.mlb.com/glossary/statcast/catcher-framing
+# "Catcher Framing Runs converts a catcher's called strikes to runs
+#  saved on a .125 runs per strike basis"
+runs_per_strike <- 0.125
+
+runs_saved <- catcher_summary %>%
+  mutate(
+    runs_saved = estimate * runs_per_strike * 100,
+    runs_lower = lower    * runs_per_strike * 100,
+    runs_upper = upper    * runs_per_strike * 100
+  ) %>%
+  # Join in catcher names from the raw data
+  left_join(
+    sc_2025_raw %>%
+      select(fielder_2, player_name) %>%
+      distinct() %>%
+      mutate(level = as.character(fielder_2)),
+    by = "level"
+  ) %>%
+  mutate(player_name = ifelse(is.na(player_name), level, player_name))
+
+# ── Top and bottom 10 catchers ─────────────────────────────────────────────
+top_bottom <- runs_saved %>%
+  slice(c(1:10, (n()-9):n())) %>%
+  mutate(
+    player_name = fct_reorder(player_name, runs_saved),
+    direction   = ifelse(runs_saved > 0, "Above average", "Below average")
+  )
+
+# ── Plot ───────────────────────────────────────────────────────────────────
+top_bottom %>%
+  ggplot(aes(x = runs_saved, y = player_name, fill = direction)) +
+  
+  # Bars
+  geom_col(width = 0.7, alpha = 0.85) +
+  
+  # Confidence intervals
+  geom_errorbarh(aes(xmin = runs_lower, xmax = runs_upper),
+                 height = 0.25, linewidth = 0.5, color = "gray30") +
+  
+  # Zero reference line
+  geom_vline(xintercept = 0, linewidth = 0.6, color = "black") +
+  
+  scale_fill_manual(
+    values = c("Above average" = "steelblue",
+               "Below average" = "firebrick"),
+    name   = NULL
+  ) +
+  
+  labs(
+    title    = "Catcher framing value: top and bottom 10 (2025 season)",
+    subtitle = "Runs saved per 100 shadow zone pitches; error bars = 90% bootstrap CI",
+    x        = "Runs saved per 100 shadow zone pitches",
+    y        = NULL
+  ) +
+  
+  theme_bw() +
+  theme(
+    panel.grid.minor  = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position   = "bottom"
+  )
+```
+
+```{r}
+library(ggridges)
+
+# install if needed
+# install.packages("ggridges")
+
+# ── Top and bottom 10 catchers by median bootstrap estimate ────────────────
+top10_catchers <- catcher_summary %>%
+  slice_max(order_by = estimate, n = 10) %>%
+  mutate(level = fct_reorder(level, estimate))
+
+bot10_catchers <- catcher_summary %>%
+  slice_min(order_by = estimate, n = 10) %>%
+  mutate(level = fct_reorder(level, estimate))
+
+top_bot_levels <- c(levels(bot10_catchers$level),
+                    levels(top10_catchers$level))
+
+# ── Join in catcher names ──────────────────────────────────────────────────
+catcher_names <- sc_2025_raw %>%
+  select(fielder_2, player_name) %>%
+  distinct() %>%
+  mutate(level = as.character(fielder_2))
+
+# ── Build ridge plot dataset ───────────────────────────────────────────────
+ridge_data <- bootstrap_framing %>%
+  filter(group == "catcher_id",
+         level %in% top_bot_levels) %>%
+  left_join(catcher_names, by = "level") %>%
+  mutate(
+    player_name = ifelse(is.na(player_name), level, player_name),
+    player_name = fct_reorder(player_name, estimate, .fun = median),
+    direction   = ifelse(
+      level %in% levels(top10_catchers$level),
+      "Top 10", "Bottom 10"
+    )
+  )
+
+# ── Plot ───────────────────────────────────────────────────────────────────
+ridge_data %>%
+  ggplot(aes(x = estimate, y = player_name, fill = direction)) +
+  geom_density_ridges(
+    quantile_lines = TRUE,
+    quantiles      = 0.5,
+    rel_min_height = 0.01,
+    alpha          = 0.7
+  ) +
+  geom_vline(xintercept = 0, linetype = "dashed",
+             linewidth = 0.5, color = "black") +
+  scale_fill_manual(
+    values = c("Top 10" = "steelblue", "Bottom 10" = "firebrick"),
+    name   = NULL
+  ) +
+  labs(
+    title    = "Bootstrap distribution of framing effects: top and bottom 10 catchers (2025)",
+    subtitle = "Vertical line = median; distributions from 100 bootstrap iterations",
+    x        = "Framing random effect (log-odds scale)",
+    y        = NULL
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position    = "bottom"
+  )
+```
+
+```{r}
+# ── Step 1: get pitch counts per catcher from model dataset ────────────────
+catcher_pitch_counts <- shadow_model %>%
+  count(catcher_id, name = "n_pitches") %>%
+  mutate(level = as.character(catcher_id))
+
+# ── Step 2: build runs saved table ────────────────────────────────────────
+runs_saved <- bootstrap_framing %>%
+  filter(group == "catcher_id") %>%
+  group_by(level) %>%
+  summarise(
+    estimate = median(estimate, na.rm = TRUE),
+    lower    = quantile(estimate, 0.05, na.rm = TRUE),
+    upper    = quantile(estimate, 0.95, na.rm = TRUE),
+    .groups  = "drop"
+  ) %>%
+  # Join pitch counts
+  left_join(catcher_pitch_counts, by = "level") %>%
+  # Join catcher names
+  left_join(
+    sc_2025_raw %>%
+      select(fielder_2, player_name) %>%
+      distinct() %>%
+      mutate(level = as.character(fielder_2)),
+    by = "level"
+  ) %>%
+  mutate(
+    player_name = ifelse(is.na(player_name), level, player_name),
+    
+    # Convert log-odds RE to probability scale first
+    # plogis() converts log-odds to probability
+    prob_estimate = plogis(estimate) - 0.5,
+    prob_lower    = plogis(lower)    - 0.5,
+    prob_upper    = plogis(upper)    - 0.5,
+    
+    # Runs saved = extra strikes generated × 0.125 runs per strike
+    # Source: https://www.mlb.com/glossary/statcast/catcher-framing
+    # scaled to full season pitch count
+    runs_saved_total  = prob_estimate * n_pitches * runs_per_strike,
+    runs_lower_total  = prob_lower    * n_pitches * runs_per_strike,
+    runs_upper_total  = prob_upper    * n_pitches * runs_per_strike,
+
+    runs_saved_per100 = prob_estimate * 100 * runs_per_strike,
+    runs_lower_per100 = prob_lower    * 100 * runs_per_strike,
+    runs_upper_per100 = prob_upper    * 100 * runs_per_strike
+  ) %>%
+  arrange(desc(runs_saved_total))
+
+# ── Step 3: preview the leaderboard ───────────────────────────────────────
+runs_saved %>%
+  select(player_name, n_pitches,
+         runs_saved_total, runs_lower_total, runs_upper_total,
+         runs_saved_per100) %>%
+  mutate(across(where(is.numeric), round, 2)) %>%
+  print(n = 20)
+```
+
+```{r}
+# ── Fit reduced model (catcher random effect only) ─────────────────────────
+framing_model_reduced <- glmer(
+  is_strike ~ plate_x + pz_norm + count + stand + p_throws +
+              (1 | catcher_id),
+  data    = shadow_model,
+  family  = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa",
+                         optCtrl   = list(maxfun = 2e5))
+)
+
+# ── Compare via AIC ────────────────────────────────────────────────────────
+AIC(framing_model, framing_model_reduced)
+
+# ── Likelihood ratio test ──────────────────────────────────────────────────
+anova(framing_model_reduced, framing_model, test = "Chisq")
+```
+
+```{r}
+shadow_2025 %>%
+  group_by(count) %>%
+  summarise(
+    strike_rate = mean(is_strike),
+    n_pitches   = n(),
+    .groups     = "drop"
+  ) %>%
+  # Order counts logically
+  mutate(count = fct_reorder(count, strike_rate)) %>%
+  ggplot(aes(x = strike_rate, y = count, fill = strike_rate)) +
+  geom_col() +
+  geom_text(aes(label = scales::percent(strike_rate, accuracy = 0.1)),
+            hjust = -0.1, size = 3) +
+  scale_fill_gradient2(
+    low      = "dodgerblue",
+    mid      = "white",
+    high     = "firebrick",
+    midpoint = mean(shadow_2025$is_strike),
+    guide    = "none"
+  ) +
+  scale_x_continuous(
+    labels = scales::percent,
+    expand = expansion(mult = c(0, 0.12))
+  ) +
+  labs(
+    title    = "Called strike rate by count in shadow zone (2025 season)",
+    subtitle = "Pitcher-friendly counts show higher strike rates on borderline pitches",
+    x        = "Called strike rate",
+    y        = "Count"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+shadow_2025 %>%
+  group_by(stand, count) %>%
+  summarise(
+    strike_rate = mean(is_strike),
+    n_pitches   = n(),
+    .groups     = "drop"
+  ) %>%
+  mutate(
+    count = fct_reorder(count, strike_rate),
+    stand = recode(stand, "L" = "Left-handed batter", "R" = "Right-handed batter")
+  ) %>%
+  ggplot(aes(x = strike_rate, y = count, color = stand)) +
+  geom_point(aes(size = n_pitches), alpha = 0.7) +
+  geom_line(aes(group = count), color = "gray70", linewidth = 0.4) +
+  scale_color_manual(
+    values = c("Left-handed batter"  = "steelblue",
+               "Right-handed batter" = "firebrick"),
+    name   = NULL
+  ) +
+  scale_size_continuous(
+    name   = "Pitches",
+    range  = c(2, 6),
+    labels = scales::comma
+  ) +
+  scale_x_continuous(labels = scales::percent) +
+  labs(
+    title    = "Called strike rate by count and batter handedness (2025 shadow zone)",
+    subtitle = "Lines connect the same count across handedness — gap indicates handedness effect",
+    x        = "Called strike rate",
+    y        = "Count"
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position  = "bottom"
+  )
+```
