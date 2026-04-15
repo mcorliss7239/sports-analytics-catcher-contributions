@@ -16,16 +16,197 @@ execute:
 #| warning: false
 #| message: false
 
-# Load libraries
-library(httr)
 library(tidyverse)
-library(lme4)
-library(broom.mixed)
-library(ggridges)
+library(knitr)
 
 # Load cached data
-sc_2025_raw <- readRDS("statcast_2025_raw.rds")
-#bootstrap_framing <- readRDS("bootstrap_framing_50.rds")
+sc_2025_raw  <- readRDS("statcast_2025_raw.rds")
+
+# Constants
+shadow_threshold <- ((9.000 / pi) + (9.250 / pi)) / 2 / 12
+runs_per_strike  <- 0.125
+
+# Shadow zone filter
+shadow_2025 <- sc_2025_raw %>%
+  filter(
+    description %in% c("called_strike", "ball"),
+    !is.na(plate_x), !is.na(plate_z),
+    !is.na(sz_top),  !is.na(sz_bot),
+    !is.na(fielder_2)
+  ) %>%
+  mutate(
+    is_strike = as.integer(description == "called_strike"),
+    pz_norm   = (plate_z - sz_bot) / (sz_top - sz_bot),
+    dist_x    = pmin(abs(plate_x - 0.83), abs(plate_x + 0.83)),
+    dist_zt   = abs(plate_z - sz_top),
+    dist_zb   = abs(plate_z - sz_bot),
+    dist_edge = pmin(dist_x, dist_zt, dist_zb),
+    in_shadow = dist_edge <= shadow_threshold
+  ) %>%
+  filter(in_shadow) %>%
+  mutate(
+    catcher_id = as.factor(fielder_2),
+    pitcher_id = as.factor(pitcher),
+    batter_id  = as.factor(batter),
+    count      = as.factor(paste0(balls, "-", strikes)),
+    stand      = as.factor(stand),
+    p_throws   = as.factor(p_throws)
+  ) %>%
+  select(
+    game_date, game_pk,
+    pitcher_id, batter_id, catcher_id,
+    is_strike, plate_x, plate_z, pz_norm,
+    sz_top, sz_bot, dist_edge,
+    count, stand, p_throws
+  )
+
+# Model dataset
+eligible_catchers <- shadow_2025 %>%
+  count(catcher_id) %>%
+  filter(n >= 300) %>%
+  pull(catcher_id)
+
+shadow_model <- shadow_2025 %>%
+  filter(catcher_id %in% eligible_catchers) %>%
+  mutate(catcher_id = droplevels(catcher_id))
+
+# Tables
+model_comparison_table <- tibble(
+  Model            = c("Full model", "Reduced model"),
+  `Random effects` = c("Catcher + Pitcher + Batter", "Catcher only"),
+  AIC              = c(204944.9, 205241.2),
+  `Delta AIC`      = c(0.0, 296.3),
+  `p-value`        = c("—", "< 2.2e-16")
+) %>%
+  kable(
+    format  = "simple",
+    caption = "Model comparison: full vs. reduced mixed-effects logistic regression",
+    digits  = 1
+  )
+
+variance_fixed_table <- tibble(
+  Term                     = c(
+    "Pitcher (random)", "Batter (random)", "Catcher (random)",
+    "plate_x (fixed)", "pz_norm (fixed)", "count 3-0 (fixed)",
+    "count 0-2 (fixed)", "standR (fixed)", "p_throwsR (fixed)"
+  ),
+  Estimate                 = c(
+    "—", "—", "—",
+    "-0.014", "-0.047", "0.586", "-1.897", "0.140", "-0.012"
+  ),
+  `Std. Dev. / Std. Error` = c(
+    "0.112", "0.126", "0.077",
+    "0.006", "0.010", "0.038", "0.036", "0.016", "0.017"
+  ),
+  Variance                 = c(
+    "0.013", "0.016", "0.006",
+    "—", "—", "—", "—", "—", "—"
+  ),
+  `p-value`                = c(
+    "—", "—", "—",
+    "0.027", "< 2e-16", "< 2e-16", "< 2e-16", "< 2e-16", "0.468"
+  )
+) %>%
+  kable(
+    format  = "simple",
+    caption = "Variance components and key fixed effects from full mixed-effects model",
+    digits  = 3
+  )
+
+# Plot objects
+heatmap_plot <- shadow_2025 %>%
+  mutate(
+    px_bin = round(plate_x / 0.1) * 0.1,
+    pz_bin = round(plate_z / 0.1) * 0.1
+  ) %>%
+  filter(
+    abs(px_bin) <= (0.83 + shadow_threshold + 0.05),
+    pz_bin >= (1.5 - shadow_threshold - 0.05),
+    pz_bin <= (3.5 + shadow_threshold + 0.05)
+  ) %>%
+  group_by(px_bin, pz_bin) %>%
+  summarise(strike_rate = mean(is_strike), n_pitches = n(), .groups = "drop") %>%
+  filter(n_pitches >= 50) %>%
+  ggplot(aes(x = px_bin, y = pz_bin, fill = strike_rate)) +
+  geom_tile() +
+  annotate("rect", xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5,
+           fill = NA, color = "black", linewidth = 0.8) +
+  annotate("rect",
+           xmin = -(0.83 + shadow_threshold), xmax = (0.83 + shadow_threshold),
+           ymin = 1.5 - shadow_threshold, ymax = 3.5 + shadow_threshold,
+           fill = NA, color = "white", linewidth = 0.6, linetype = "dashed") +
+  scale_fill_gradient2(low = "dodgerblue", mid = "white", high = "firebrick",
+                       midpoint = 0.5, name = "Called strike rate") +
+  labs(
+    title    = "Called strike rate by pitch location (2025 shadow zone)",
+    subtitle = "Shadow zone only — interior excluded by design; dashed box = shadow zone boundary",
+    x = "Horizontal position (ft, catcher's perspective)",
+    y = "Vertical position (ft)"
+  ) +
+  coord_fixed(xlim = c(-1.5, 1.5), ylim = c(0.5, 4.5)) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
+pitchdist_plot <- shadow_2025 %>%
+  count(catcher_id, name = "n_pitches") %>%
+  ggplot(aes(x = n_pitches)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = 300, color = "firebrick",
+             linetype = "dashed", linewidth = 0.8) +
+  annotate("text", x = 320, y = Inf, label = "300 pitch\nminimum",
+           hjust = 0, vjust = 1.5, color = "firebrick", size = 3.5) +
+  labs(
+    title    = "Shadow zone pitches per catcher (2025 season)",
+    subtitle = "111 total catchers; 85 meet the 300-pitch minimum",
+    x = "Number of shadow zone pitches", y = "Number of catchers"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+
+countrate_plot <- shadow_2025 %>%
+  group_by(count) %>%
+  summarise(strike_rate = mean(is_strike), n_pitches = n(), .groups = "drop") %>%
+  mutate(count = fct_reorder(count, strike_rate)) %>%
+  ggplot(aes(x = strike_rate, y = count, fill = strike_rate)) +
+  geom_col() +
+  geom_text(aes(label = scales::percent(strike_rate, accuracy = 0.1)),
+            hjust = -0.1, size = 3) +
+  scale_fill_gradient2(low = "dodgerblue", mid = "white", high = "firebrick",
+                       midpoint = mean(shadow_2025$is_strike), guide = "none") +
+  scale_x_continuous(labels = scales::percent,
+                     expand = expansion(mult = c(0, 0.12))) +
+  labs(
+    title    = "Called strike rate by count in shadow zone (2025 season)",
+    subtitle = "Pitcher-friendly counts show higher strike rates on borderline pitches",
+    x = "Called strike rate", y = "Count"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+
+handedness_plot <- shadow_2025 %>%
+  group_by(stand, count) %>%
+  summarise(strike_rate = mean(is_strike), n_pitches = n(), .groups = "drop") %>%
+  mutate(
+    count = fct_reorder(count, strike_rate),
+    stand = recode(stand, "L" = "Left-handed batter", "R" = "Right-handed batter")
+  ) %>%
+  ggplot(aes(x = strike_rate, y = count, color = stand)) +
+  geom_point(aes(size = n_pitches), alpha = 0.7) +
+  geom_line(aes(group = count), color = "gray70", linewidth = 0.4) +
+  scale_color_manual(
+    values = c("Left-handed batter" = "steelblue", "Right-handed batter" = "firebrick"),
+    name = NULL
+  ) +
+  scale_size_continuous(name = "Pitches", range = c(2, 6),
+                        labels = scales::comma) +
+  scale_x_continuous(labels = scales::percent) +
+  labs(
+    title    = "Called strike rate by count and batter handedness (2025 shadow zone)",
+    subtitle = "Lines connect the same count across handedness — gap indicates handedness effect",
+    x = "Called strike rate", y = "Count"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom")
 ```
 
 # Abstract
@@ -95,13 +276,13 @@ balls at the exterior edge, confirming that borderline calls are not determinist
 (@fig-heatmap). The interior of the strike zone is excluded by design since pitches 
 well inside the zone are not influenced by framing.
 
-(@fig-pitchdist) displays the distribution of shadow zone pitches per catcher. This
+@fig-pitchdist displays the distribution of shadow zone pitches per catcher. This
 figure is right-skewed with a long right tail of starting catchers. The 
 300-pitch minimum cutoff removes 26 catchers with insufficient data, retaining 
 85 catchers with reliable sample sizes for modeling. Catchers retained for 
 modeling saw anywhere from 300 to approximately 4,500 shadow zone pitches.
 
-(@fig-countrate) shows that called strike rate varies dramatically by count, ranging 
+@fig-countrate shows that called strike rate varies dramatically by count, ranging 
 from 57% on 3-0 counts to 10.6% on 0-2 counts. This confirms that count 
 strongly influences umpire behavior on borderline pitches. Notably, the highest 
 strike rates occur on hitter-friendly counts like 3-0 and 2-0, where umpires 
@@ -110,7 +291,7 @@ to throw one, while two-strike counts like 0-2 and 1-2 show the lowest strike
 rates. This pattern justifies inclusion of `count` as a fixed effect in the 
 model to avoid attributing count effects to catcher framing.
 
-Finally, (@fig-handedness) reveals that right-handed batters consistently receive higher
+Finally, @fig-handedness reveals that right-handed batters consistently receive higher
 called strike rates than left-handed batters across every count with the largest
 gap observed on 3-1 counts. This persistent handedness effect justifies including
 `stand` as a fixed effect to avoid attributing batter handedness differences to
@@ -193,7 +374,7 @@ catcher framing effects. These results are summarized in (@tbl-model-comparison)
 
 ### Model Interpretation
 
-(@tbl-variance-fixed) displays the variance components and key fixed effects from the full 
+@tbl-variance-fixed displays the variance components and key fixed effects from the full 
 model. Catcher variance (0.006) is smaller than both pitcher (0.013) and batter 
 (0.016) variance, suggesting that pitch location and batter/pitcher context 
 explain more variation in borderline calls than catcher framing alone. However, 
@@ -210,7 +391,7 @@ called strike rates across counts observed in the EDA — with 3-0 counts showin
 the highest tendency toward called strikes (β = 0.586) and 0-2 counts the lowest 
 (β = -1.897). Right-handed batters received significantly more called strikes on 
 borderline pitches than left-handed batters (β = 0.140, p < 2e-16), consistent 
-with the handedness effect observed in Figure 4.
+with the handedness effect observed in (@fig-handedness).
 
 ### Catcher Framing Estimates
 
