@@ -13,7 +13,7 @@ library(tidyverse)
 
 # ── Load cached data if already pulled (comment out to re-run) ─────────────
 # sc_2025_raw      <- readRDS("statcast_2025_raw.rds")
-# bootstrap_framing <- readRDS("bootstrap_framing_100.rds")
+# bootstrap_framing <- readRDS("bootstrap_framing_50.rds")
 ```
 
 ```{r}
@@ -242,14 +242,45 @@ AIC(framing_model, framing_model_reduced)
 # ── Likelihood ratio test ──────────────────────────────────────────────────
 anova(framing_model_reduced, framing_model, test = "Chisq")
 ```
+```{r}
+library(knitr)
+
+model_comparison_table <- tibble(
+  Model            = c("Full model", "Reduced model"),
+  `Random effects` = c("Catcher + Pitcher + Batter", "Catcher only"),
+  AIC              = c(204944.9, 205241.2),
+  `Delta AIC`      = c(0.0, 296.3),
+  `p-value`        = c("—", "< 2.2e-16")
+) %>%
+  kable(
+    format  = "simple",
+    caption = "Model comparison: full vs. reduced mixed-effects logistic regression",
+    digits  = 1
+  )
+
+variance_table <- tibble(
+  `Random effect` = c("Pitcher", "Batter", "Catcher"),
+  Variance        = c(0.012515, 0.015883, 0.005856),
+  `Std. Dev.`     = c(0.11187,  0.12603,  0.07652)
+) %>%
+  kable(
+    format  = "simple",
+    caption = "Random effect variance components from full mixed-effects model",
+    digits  = 4
+  )
+
+```
 
 ```{r}
+#| echo: false
+#| warning: false
+
 #heatmap
 
 library(ggplot2)
 
 # Create a 2D grid of called strike rate across plate location
-shadow_2025 %>%
+heatmap_plot <- shadow_2025 %>%
   mutate(
     px_bin = round(plate_x / 0.1) * 0.1,
     pz_bin = round(plate_z / 0.1) * 0.1
@@ -304,9 +335,12 @@ shadow_2025 %>%
 ```
 
 ```{r}
+#| echo: false
+#| warning: false
+
 #pitch distribution histogram
 
-shadow_2025 %>%
+pitchdist_plot <- shadow_2025 %>%
   count(catcher_id, name = "n_pitches") %>%
   ggplot(aes(x = n_pitches)) +
   geom_histogram(bins = 30, fill = "steelblue", color = "white") +
@@ -330,9 +364,12 @@ shadow_2025 %>%
 ```
 
 ```{r}
+#| echo: false
+#| warning: false
+
 #strike rate by count
 
-shadow_2025 %>%
+countrate_plot <- shadow_2025 %>%
   group_by(count) %>%
   summarise(
     strike_rate = mean(is_strike),
@@ -367,9 +404,12 @@ shadow_2025 %>%
 ```
 
 ```{r}
+#| echo: false
+#| warning: false
+
 #strike rate by handedness
 
-shadow_2025 %>%
+handedness_plot <- shadow_2025 %>%
   group_by(stand, count) %>%
   summarise(
     strike_rate = mean(is_strike),
@@ -421,7 +461,7 @@ game_pa <- shadow_model |>
   ungroup()
 
 # Step 2: bootstrap
-N_BOOT <- 100  # start with 100, can increase later
+N_BOOT <- 50  # start with 50, can increase later
 
 # Set seed for reproducibility
 set.seed(460)
@@ -451,7 +491,7 @@ bootstrap_framing <-
       mutate(boot = boot_i)
   })
 
-saveRDS(bootstrap_framing, "bootstrap_framing_100.rds")
+saveRDS(bootstrap_framing, "bootstrap_framing_50.rds")
 ```
 
 ```{r}
