@@ -1,7 +1,7 @@
 ---
-title: "Measuring MLB Catcher Defensive Contributions Through Pitch Framing"
-author: "Your Name"
-date: "Spring 2026"
+title: "Measuring MLB Catcher Defensive Contributions"
+author: "Arthur Spirou, Joel Maison, and Morgan Corliss"
+date: "28 April 2026"
 format: 
   pdf:
     toc: false
@@ -15,29 +15,197 @@ execute:
 
 # Introduction
 
+## Problem Description
+- Catcher defense is historically difficult to measure — traditional statistics 
+  like passed balls and caught stealing rate capture only a fraction of defensive value
+- Pitch framing — the ability to influence umpires to call borderline pitches strikes 
+  — is one of the most impactful and measurable aspects of catcher defense
+- A single extra strike per game can shift run expectancy, affect pitcher confidence, 
+  and alter game outcomes in ways that never appear in a box score
+
+## Why It Is Interesting/Important
+- Framing is worth significant run value — elite framers can save 10-15 runs per 
+  season relative to below-average framers, equivalent to a wins above replacement 
+  difference of 1-1.5 WAR (needs citation)
+- With the rise of Statcast tracking, pitch coordinates are now available for every 
+  pitch allowing rigorous statistical isolation of catcher framing skill
+- Quantifying framing helps teams make better roster decisions — a backup catcher 
+  who frames well may provide more value than their offensive numbers suggest
+- The question is directly relevant to the broader sports analytics goal of measuring 
+  contributions that are invisible to casual observation
+
+## Brief Summary of Results
+- We fit a mixed-effects logistic regression model to 171,304 shadow zone pitches 
+  from the 2025 MLB season, isolating each catcher's framing contribution as a 
+  random effect after controlling for pitch location, count, batter, and pitcher
+- Results reveal meaningful variation in framing ability across MLB catchers, with 
+  the best framers saving several runs per season relative to the worst
+- Bootstrap confidence intervals show that top and bottom framers are statistically 
+  distinguishable from average, while mid-tier catchers have intervals that overlap zero
+
 # Data
 
 ## Data Sources
 
+- Pitch-level Statcast data accessed via Baseball Savant's CSV export API
+- 2025 MLB regular season: March 27 – September 28, 2025
+- 712,192 total pitches across 118 variables
+- Key variables: `plate_x`, `plate_z` (pitch coordinates), `sz_top`, `sz_bot` 
+  (batter-specific strike zone boundaries), `fielder_2` (catcher ID), 
+  `description` (called strike or ball), `balls`, `strikes`, `stand`, `p_throws`
+- Pitch-level coordinate data is uniquely suited for framing analysis — allows 
+  precise separation of pitch location from catcher influence on the call
+- All data publicly available at [baseballsavant.mlb.com](https://baseballsavant.mlb.com)
+
 ## Preprocessing
+
+- Filtered to called pitches only — swings, fouls, and balls in play excluded 
+  since framing only applies to pitches the umpire must judge
+- Removed pitches with missing plate coordinates, strike zone boundaries, or catcher ID
+- Shadow zone filter: retained pitches within one baseball diameter of the strike 
+  zone edge, consistent with MLB's official shadow zone definition (MLB.com Glossary)
+- Threshold of 0.242 ft derived from 2026 Official Baseball Rules circumference 
+  specification (9.000–9.250 inches)
+- Vertical pitch location normalized (`pz_norm`) relative to each batter's 
+  individual strike zone to control for batter height differences
+- Minimum 300 shadow zone pitches per catcher applied to ensure reliable random 
+  effect estimates — reduces dataset from 111 to 85 catchers
+- Final model dataset: 171,304 shadow zone pitches across 85 catchers
 
 ## Exploratory Data Analysis
 
+- Shadow zone strike rate of 34.2% confirms pitches are genuinely borderline —
+  umpires do not call them consistently in either direction
+- Heatmap of called strike rate by location shows a clear gradient from near-certain 
+  strikes at the interior edge to near-certain balls at the exterior edge, motivating 
+  the shadow zone filter; interior of strike zone excluded by design (Figure 1)
+- Pitch volume per catcher is right-skewed with a long left tail of backup and 
+  emergency catchers — the 300 pitch minimum cutoff removes 26 catchers with 
+  insufficient data, retaining 85 catchers for modeling (Figure 2)
+- Called strike rate varies dramatically by count — ranging from 57.0% on 3-0 
+  counts to 10.6% on 0-2 counts, confirming that count strongly influences 
+  umpire behavior on borderline pitches and justifying inclusion of `count` 
+  as a fixed effect (Figure 3)
+- Right-handed batters consistently receive slightly higher called strike rates 
+  than left-handed batters across nearly every count, with the largest gap 
+  observed on 3-0 counts; this pattern justifies including `stand` as a fixed 
+  effect (Figure 4)
+
 # Methods
 
-## Your Name: Pitch Framing via Mixed-Effects Logistic Regression
+## Morgan: Pitch Framing via Mixed-Effects Logistic Regression
+
+### Model Description**
+
+- Goal: isolate catcher influence on borderline pitch calls above and beyond 
+  pitch location, count, and batter/pitcher context
+- Mixed-effects logistic regression with binary outcome: called strike (1) or ball (0)
+- Fixed effects: `plate_x`, `pz_norm`, `count`, `stand`, `p_throws`
+- Random effects: `catcher_id`, `pitcher_id`, `batter_id`
+- Catcher random effect is the primary quantity of interest — represents each 
+  catcher's tendency to influence umpire calls above or below average
+
+### Model Assumptions
+
+- Binary outcome follows a Bernoulli distribution: $Y_i \sim \text{Bernoulli}(p_i)$
+- Log-odds of a called strike modeled as a linear function of fixed and random effects
+- Catcher, pitcher, and batter random effects are assumed independently normally 
+  distributed with mean zero: $u_j \sim N(0, \sigma^2)$
+- Random effects are independent of each other and of the fixed effect predictors
+- Shadow zone pitches are conditionally independent given the random effects
+
+### Justification
+
+- Mixed-effects over fixed effects: handles the large number of catchers (85), 
+  borrows strength across small samples for backup catchers via partial pooling, 
+  and shrinks unreliable estimates toward the mean
+- Pitcher and batter random effects included to avoid attributing pitcher/batter 
+  tendencies to the catcher — directly addresses confounding identified in the 
+  assignment description
+- BOBYQA optimizer specified due to large dataset size and three-way random effect 
+  structure, which can cause premature convergence with the default optimizer
+
+### Model Comparison/Evaluation
+
+- Reduced model fit without pitcher and batter random effects:
+  `is_strike ~ plate_x + pz_norm + count + stand + p_throws + (1 | catcher_id)`
+- Full vs. reduced model compared via AIC — lower AIC indicates the added 
+  complexity of pitcher and batter random effects is justified
+- Likelihood ratio test used to formally assess whether adding pitcher and batter 
+  random effects significantly improves model fit
+- If full model fits better, confirms that omitting pitcher/batter effects would 
+  bias catcher framing estimates
+
+### Uncertainty Quantification
+
+- Structured bootstrap resampling following the approach of the course demo
+- Unit of resampling: plate appearances within games — replays each game while 
+  preserving the schedule structure and pitch dependencies within PAs
+- 100 bootstrap iterations, each refitting the full mixed-effects model
+- 90% confidence intervals reported for each catcher's random effect estimate
+- `set.seed(460)` set before bootstrap loop for reproducibility
+- Justification: case bootstrap makes fewer assumptions than parametric bootstrap — 
+  does not assume the model is perfectly specified, and resampling at the PA-within-game 
+  level reflects the natural source of variability in catcher assignments across a season
 
 # Results
 
-## Your Name: Framing Model Results
+## Morgan: Framing Model Results
+
+- Full model AIC (204,945) is 296 units lower than reduced model AIC (205,241)
+- Likelihood ratio test: χ²(2) = 300.25, p < 2.2e-16
+- Adding pitcher and batter random effects significantly improves model fit
+- Confirms that pitcher and batter tendencies independently influence borderline 
+  pitch calls — omitting them would bias catcher framing estimates
+- Full model selected for all subsequent inference on catcher framing effects
+- Pitcher handedness (`p_throws`) was not significant (p = 0.468), suggesting 
+  that after controlling for pitch location and count, pitcher handedness does 
+  not meaningfully influence borderline call rates — however it was retained 
+  in the model for completeness
+  - Catcher variance (0.006) is smaller than pitcher (0.013) and batter (0.016) 
+  variance, suggesting location and batter/pitcher context explain more variation 
+  in borderline calls than catcher framing alone — but catcher variance is 
+  meaningfully non-zero, justifying the framing analysis
 
 # Discussion
 
 ## Conclusions
 
 ## Limitations
+- Shadow zone threshold of 0.242 ft is derived from average baseball diameter — 
+  results may be sensitive to this choice, a robustness check with alternative 
+  thresholds would strengthen conclusions
+- Bootstrap with 100 iterations may not fully capture uncertainty for catchers with 
+  smaller sample sizes — increasing to 500-1000 iterations would produce more stable CIs
+- Model assumes catcher random effects are normally distributed — this may not hold 
+  if framing ability is bimodal (elite framers vs. everyone else)
+- Pitcher running game tendencies and wild pitch rates not accounted for — some 
+  pitcher effects may still bleed into catcher estimates
+- Selection bias not addressed — opposing teams may attempt fewer stolen bases 
+  against strong catchers, affecting game context in ways not captured by the model
+- Single season analysis — framing estimates based on one season may reflect some 
+  noise, year-to-year stability not verified due to scope of project
 
 ## Future Work
+- Year-to-year stability check using 2024 data — high correlation between 2024 and 
+  2025 catcher rankings would confirm the model is measuring real skill vs. noise
+- Increase bootstrap iterations to 500-1000 for more stable uncertainty estimates
+- Bayesian implementation using `rstanarm` would provide full posterior distributions 
+  on catcher effects rather than bootstrap approximations
 
 # References
+
+MLB.com. "Catcher Framing." *MLB Glossary*, Major League Baseball, 
+https://www.mlb.com/glossary/statcast/catcher-framing. Accessed April 2026.
+
+MLB Advanced Media. *Statcast Pitch-Level Data, 2025 MLB Regular Season.* 
+Baseball Savant, Major League Baseball, 2025. 
+https://baseballsavant.mlb.com/statcast_search. Accessed April 2026.
+
+Major League Baseball. *2026 Official Baseball Rules*, pg. 5. 
+https://mktg.mlbstatic.com/mlb/official-information/2026-official-baseball-rules.pdf. 
+Accessed April 2026.
+
+Powell, M.J.D. "The BOBYQA Algorithm for Bound Constrained Optimization Without 
+Derivatives." *Cambridge NA Report NA2009/06*, University of Cambridge, 2009.
 
