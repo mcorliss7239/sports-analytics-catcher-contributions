@@ -254,19 +254,43 @@ model_comparison_table <- tibble(
 ) %>%
   kable(
     format  = "simple",
-    caption = "Model comparison: full vs. reduced mixed-effects logistic regression",
+    caption = "Table 1: Model comparison: full vs. reduced mixed-effects logistic regression",
     digits  = 1
   )
 
-variance_table <- tibble(
-  `Random effect` = c("Pitcher", "Batter", "Catcher"),
-  Variance        = c(0.012515, 0.015883, 0.005856),
-  `Std. Dev.`     = c(0.11187,  0.12603,  0.07652)
+variance_fixed_table <- tibble(
+  Term          = c(
+    "Pitcher (random)",
+    "Batter (random)",
+    "Catcher (random)",
+    "plate_x (fixed)",
+    "pz_norm (fixed)",
+    "count 3-0 (fixed)",
+    "count 0-2 (fixed)",
+    "standR (fixed)",
+    "p_throwsR (fixed)"
+  ),
+  Estimate = c(
+    "—", "—", "—",
+    "-0.014", "-0.047", "0.586", "-1.897", "0.140", "-0.012"
+  ),
+  `Std. Dev. / Std. Error` = c(
+    "0.112", "0.126", "0.077",
+    "0.006", "0.010", "0.038", "0.036", "0.016", "0.017"
+  ),
+  `Variance` = c(
+    "0.013", "0.016", "0.006",
+    "—", "—", "—", "—", "—", "—"
+  ),
+  `p-value` = c(
+    "—", "—", "—",
+    "0.027", "< 2e-16", "< 2e-16", "< 2e-16", "< 2e-16", "0.468"
+  )
 ) %>%
   kable(
     format  = "simple",
-    caption = "Random effect variance components from full mixed-effects model",
-    digits  = 4
+    caption = "Table 2: Variance components and key fixed effects from full mixed-effects model",
+    digits  = 3
   )
 
 ```

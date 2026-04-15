@@ -69,6 +69,8 @@ include `plate_x` and `plate_z` (pitch coordinates at home plate), `sz_top` and
 as it allows precise separation of where the pitch actually crossed the plate 
 from how the catcher influenced the umpire's call.
 
+## Preprocessing: Catcher Framing
+
 The dataset was filtered to called pitches only. Swings, fouls, and balls in 
 play were excluded since framing only applies to pitches the umpire must judge. 
 Pitches with missing plate coordinates, strike zone boundaries, or catcher ID 
@@ -83,137 +85,172 @@ reliable random effect estimates, reducing the dataset from 111 to 85 catchers
 and from 171,304 to 168,709 pitches. The final model dataset contains 168,709 
 shadow zone pitches across 85 catchers.
 
-## Exploratory Data Analysis
+## Exploratory Data Analysis: Catcher Framing
 
 The strike rate for pitches in the shadow zone is 34.2%. This confirms that 
 borderline pitches are genuinely ambiguous, umpires do not consistently call them
 strikes. A heatmap of called strike rate by pitch location reveals a clear gradient
 from near-certain strikes at the interior edge of the shadow zone to near-certain 
 balls at the exterior edge, confirming that borderline calls are not deterministic
-(Figure 1). The interior of the strike zone is excluded by design since pitches 
+(@fig-heatmap). The interior of the strike zone is excluded by design since pitches 
 well inside the zone are not influenced by framing.
 
-Figure 2 displays the distribution of shadow zone pitches per catcher. This
+(@fig-pitchdist) displays the distribution of shadow zone pitches per catcher. This
 figure is right-skewed with a long right tail of starting catchers. The 
 300-pitch minimum cutoff removes 26 catchers with insufficient data, retaining 
-85 catchers with reliable sample sizes for modeling. The median catcher saw 
-approximately 1,209 shadow zone pitches across the season, while the most active 
-framing catcher received 4,572.
+85 catchers with reliable sample sizes for modeling. Catchers retained for 
+modeling saw anywhere from 300 to approximately 4,500 shadow zone pitches.
 
-Figure 3 shows that called strike rate varies dramatically by count, ranging 
-from 57.0% on 3-0 counts to 10.6% on 0-2 counts. This confirms that count 
-strongly influences umpire behavior on borderline pitches — in pitcher-friendly 
-counts umpires are more likely to reward a well-located pitch with a strike call, 
-while in batter-friendly counts the opposite holds. This pattern justifies 
-inclusion of `count` as a fixed effect in the model.
+(@fig-countrate) shows that called strike rate varies dramatically by count, ranging 
+from 57% on 3-0 counts to 10.6% on 0-2 counts. This confirms that count 
+strongly influences umpire behavior on borderline pitches. Notably, the highest 
+strike rates occur on hitter-friendly counts like 3-0 and 2-0, where umpires 
+appear more willing to call borderline pitches strikes when the pitcher needs 
+to throw one, while two-strike counts like 0-2 and 1-2 show the lowest strike 
+rates. This pattern justifies inclusion of `count` as a fixed effect in the 
+model to avoid attributing count effects to catcher framing.
 
-Finally, Figure 4 reveals that right-handed batters consistently receive slightly 
-higher called strike rates than left-handed batters across nearly every count, 
-with the largest gap observed on 3-0 counts. This persistent handedness effect 
-justifies including `stand` as a fixed effect to avoid attributing batter 
-handedness differences to catcher framing.                                         
+Finally, (@fig-handedness) reveals that right-handed batters consistently receive higher
+called strike rates than left-handed batters across every count with the largest
+gap observed on 3-1 counts. This persistent handedness effect justifies including
+`stand` as a fixed effect to avoid attributing batter handedness differences to
+catcher framing.                                         
 
 # Methods
 
-## Morgan: Pitch Framing via Mixed-Effects Logistic Regression
+## Morgan Corliss: Catcher Framing
 
-### Model Description**
+The goal of this analysis is to isolate each catcher's influence on borderline 
+pitch calls above and beyond what can be explained by pitch location, count, and 
+batter/pitcher context. To accomplish this, we fit a mixed-effects logistic 
+regression model where the binary outcome is whether a shadow zone pitch was 
+called a strike (1) or a ball (0). The model takes the following form:
 
-- Goal: isolate catcher influence on borderline pitch calls above and beyond 
-  pitch location, count, and batter/pitcher context
-- Mixed-effects logistic regression with binary outcome: called strike (1) or ball (0)
-- Fixed effects: `plate_x`, `pz_norm`, `count`, `stand`, `p_throws`
-- Random effects: `catcher_id`, `pitcher_id`, `batter_id`
-- Catcher random effect is the primary quantity of interest — represents each 
-  catcher's tendency to influence umpire calls above or below average
+$$\log\left(\frac{p_i}{1-p_i}\right) = \beta_0 + \beta_1 \text{plate\_x}_i + 
+\beta_2 \text{pz\_norm}_i + \beta_3 \text{count}_i + \beta_4 \text{stand}_i + 
+\beta_5 \text{p\_throws}_i + u_{\text{catcher}[i]} + u_{\text{pitcher}[i]} + 
+u_{\text{batter}[i]}$$
 
-### Model Assumptions
+where $p_i$ is the probability of a called strike on pitch $i$. The fixed effects 
+control for pitch location (`plate_x`, `pz_norm`), count, batter handedness 
+(`stand`), and pitcher handedness (`p_throws`). The random effects 
+$u_{\text{catcher}[i]}$, $u_{\text{pitcher}[i]}$, and $u_{\text{batter}[i]}$ 
+capture the influence of each catcher, pitcher, and batter respectively. The 
+catcher random effect is the primary quantity of interest — it represents each 
+catcher's tendency to influence umpire calls above or below the league average 
+after accounting for all other factors.
 
-- Binary outcome follows a Bernoulli distribution: $Y_i \sim \text{Bernoulli}(p_i)$
-- Log-odds of a called strike modeled as a linear function of fixed and random effects
-- Catcher, pitcher, and batter random effects are assumed independently normally 
-  distributed with mean zero: $u_j \sim N(0, \sigma^2)$
-- Random effects are independent of each other and of the fixed effect predictors
-- Shadow zone pitches are conditionally independent given the random effects
+The model assumes the binary outcome follows a Bernoulli distribution: 
+$Y_i \sim \text{Bernoulli}(p_i)$, where the log-odds of a called strike are 
+modeled as a linear function of the fixed and random effects. The catcher, 
+pitcher, and batter random effects are each assumed to be independently normally 
+distributed with mean zero: $u_j \sim N(0, \sigma^2)$. Random effects are 
+assumed independent of each other and of the fixed effect predictors, and shadow 
+zone pitches are assumed conditionally independent given the random effects.
 
-### Justification
+A mixed-effects model was chosen over a fixed-effects specification for several 
+reasons. With 85 catchers in the dataset, a fixed-effects approach would require 
+estimating 84 catcher indicator coefficients, producing unreliable estimates for 
+backup catchers with small sample sizes. The mixed-effects framework handles this 
+naturally through partial pooling — shrinking estimates for catchers with limited 
+data toward the league mean while allowing well-sampled catchers to deviate 
+further. Pitcher and batter random effects were included to avoid attributing 
+their tendencies to catchers, which would otherwise bias the framing estimates. 
+The BOBYQA optimizer was specified following recommendations for mixed models 
+with complex random effect structures (Powell, 2009).
 
-- Mixed-effects over fixed effects: handles the large number of catchers (85), 
-  borrows strength across small samples for backup catchers via partial pooling, 
-  and shrinks unreliable estimates toward the mean
-- Pitcher and batter random effects included to avoid attributing pitcher/batter 
-  tendencies to the catcher — directly addresses confounding identified in the 
-  assignment description
-- BOBYQA optimizer specified due to large dataset size and three-way random effect 
-  structure, which can cause premature convergence with the default optimizer
+To evaluate the model, we fit a reduced specification excluding the pitcher and 
+batter random effects:
 
-### Model Comparison/Evaluation
+$$\text{is\_strike} \sim \text{plate\_x} + \text{pz\_norm} + \text{count} + 
+\text{stand} + \text{p\_throws} + (1 | \text{catcher\_id})$$
 
-- Reduced model fit without pitcher and batter random effects:
-  `is_strike ~ plate_x + pz_norm + count + stand + p_throws + (1 | catcher_id)`
-- Full vs. reduced model compared via AIC — lower AIC indicates the added 
-  complexity of pitcher and batter random effects is justified
-- Likelihood ratio test used to formally assess whether adding pitcher and batter 
-  random effects significantly improves model fit
-- If full model fits better, confirms that omitting pitcher/batter effects would 
-  bias catcher framing estimates
+The full and reduced models were compared via AIC, where a lower value indicates 
+better fit relative to model complexity. A likelihood ratio test was also 
+conducted to formally assess whether adding pitcher and batter random effects 
+significantly improves model fit. If the full model fits better, it confirms 
+that omitting pitcher and batter effects would bias the catcher framing estimates.
 
-### Uncertainty Quantification
-
-- Structured bootstrap resampling following the approach of the course demo
-- Unit of resampling: plate appearances within games — replays each game while 
-  preserving the schedule structure and pitch dependencies within PAs
-- 100 bootstrap iterations, each refitting the full mixed-effects model
-- 90% confidence intervals reported for each catcher's random effect estimate
-- `set.seed(460)` set before bootstrap loop for reproducibility
-- Justification: case bootstrap makes fewer assumptions than parametric bootstrap — 
-  does not assume the model is perfectly specified, and resampling at the PA-within-game 
-  level reflects the natural source of variability in catcher assignments across a season
+To quantify uncertainty in the catcher random effect estimates, we employ a 
+structured bootstrap... [having trouble with bootstrap, not complete at this time]
 
 # Results
 
-## Morgan: Framing Model Results
+## Morgan Corliss: Catcher Framing
 
-- Full model AIC (204,945) is 296 units lower than reduced model AIC (205,241)
-- Likelihood ratio test: χ²(2) = 300.25, p < 2.2e-16
-- Adding pitcher and batter random effects significantly improves model fit
-- Confirms that pitcher and batter tendencies independently influence borderline 
-  pitch calls — omitting them would bias catcher framing estimates
-- Full model selected for all subsequent inference on catcher framing effects
-- Pitcher handedness (`p_throws`) was not significant (p = 0.468), suggesting 
-  that after controlling for pitch location and count, pitcher handedness does 
-  not meaningfully influence borderline call rates — however it was retained 
-  in the model for completeness
-  - Catcher variance (0.006) is smaller than pitcher (0.013) and batter (0.016) 
-  variance, suggesting location and batter/pitcher context explain more variation 
-  in borderline calls than catcher framing alone — but catcher variance is 
-  meaningfully non-zero, justifying the framing analysis
+### Model Comparison
+
+The full model achieved a substantially lower AIC (204,945) compared to the 
+reduced model (205,241), a difference of 296 units — well above the conventional 
+threshold of 2. The likelihood ratio test confirms this improvement is 
+statistically significant (χ²(2) = 300.25, p < 2.2e-16), providing strong 
+evidence that pitcher and batter random effects meaningfully improve model fit. 
+This result confirms that pitcher and batter tendencies independently influence 
+borderline pitch calls above and beyond pitch location and count — omitting them 
+would attribute some of their influence to catchers, biasing the framing 
+estimates. The full model was therefore selected for all subsequent inference on 
+catcher framing effects. These results are summarized in (@tbl-model-comparison).
+
+### Model Interpretation
+
+(@tbl-variance-fixed) displays the variance components and key fixed effects from the full 
+model. Catcher variance (0.006) is smaller than both pitcher (0.013) and batter 
+(0.016) variance, suggesting that pitch location and batter/pitcher context 
+explain more variation in borderline calls than catcher framing alone. However, 
+catcher variance is meaningfully non-zero, confirming that framing ability varies 
+across catchers above and beyond these controls and justifying the framing 
+analysis.
+
+Among the fixed effects, pitcher handedness (`p_throwsR`) was not statistically 
+significant (β = -0.012, p = 0.468), suggesting that after controlling for pitch 
+location and count, pitcher handedness does not meaningfully influence borderline 
+call rates. It was retained in the model for completeness. All count coefficients 
+were highly significant (p < 2e-16), consistent with the dramatic variation in 
+called strike rates across counts observed in the EDA — with 3-0 counts showing 
+the highest tendency toward called strikes (β = 0.586) and 0-2 counts the lowest 
+(β = -1.897). Right-handed batters received significantly more called strikes on 
+borderline pitches than left-handed batters (β = 0.140, p < 2e-16), consistent 
+with the handedness effect observed in Figure 4.
+
+### Catcher Framing Estimates
+
+[Pending bootstrap completion — caterpillar plot, ridge plot, runs saved 
+leaderboard, and uncertainty estimates to be added prior to final submission]
 
 # Discussion
 
 ## Conclusions
 
+The model comparison results provide strong evidence that catcher framing is a 
+real and measurable skill. The full mixed-effects model fit significantly better 
+than the reduced model (AIC difference = 296, χ²(2) = 300.25, p < 2.2e-16), 
+confirming that catcher identity explains meaningful variation in borderline 
+pitch calls above and beyond pitch location, count, pitcher, and batter effects. 
+The non-zero catcher variance (0.006) further supports this conclusion. 
+
+*[Pending bootstrap completion — conclusions about the magnitude of framing 
+differences across catchers and runs saved estimates to be added prior to 
+final submission.]*
+
 ## Limitations
-- Shadow zone threshold of 0.242 ft is derived from average baseball diameter — 
-  results may be sensitive to this choice, a robustness check with alternative 
-  thresholds would strengthen conclusions
-- Bootstrap with 100 iterations may not fully capture uncertainty for catchers with 
-  smaller sample sizes — increasing to 500-1000 iterations would produce more stable CIs
-- Model assumes catcher random effects are normally distributed — this may not hold 
-  if framing ability is bimodal (elite framers vs. everyone else)
-- Pitcher running game tendencies and wild pitch rates not accounted for — some 
-  pitcher effects may still bleed into catcher estimates
-- Selection bias not addressed — opposing teams may attempt fewer stolen bases 
-  against strong catchers, affecting game context in ways not captured by the model
-- Single season analysis — framing estimates based on one season may reflect some 
-  noise, year-to-year stability not verified due to scope of project
+
+Several limitations of this analysis should be noted. First, the shadow zone 
+threshold of 0.242 ft is derived from the average baseball diameter per the 
+2026 Official Baseball Rules and a robustness check with alternative values 
+would strengthen this analysis. Second, this analysis is based on a single 
+season of data, framing estimates from one season may reflect some noise. 
+Conducting an analysis of different years would help verify our conclusions. 
 
 ## Future Work
-- Year-to-year stability check using 2024 data — high correlation between 2024 and 
-  2025 catcher rankings would confirm the model is measuring real skill vs. noise
-- Increase bootstrap iterations to 500-1000 for more stable uncertainty estimates
-- Bayesian implementation using `rstanarm` would provide full posterior distributions 
-  on catcher effects rather than bootstrap approximations
+
+Several extensions of this work would strengthen the conclusions. A 
+year-to-year stability check using 2024 data would help determine 
+whether catcher rankings are consistent across seasons. High correlation between 
+2024 and 2025 estimates would provide evidence that the model is measuring real 
+framing skill rather than noise. Finally, a Bayesian implementation using 
+`rstanarm` would provide full posterior distributions on catcher framing effects
+rather than bootstrap approximations, accounting for the hierarchical structure
+of the data.
 
 # References
 
@@ -241,12 +278,18 @@ Derivatives." *Cambridge NA Report NA2009/06*, University of Cambridge, 2009.
 
 ```{r}
 #| echo: false
+#| label: tbl-model-comparison
+#| tbl-cap: "Table 1: Model comparison — full vs. reduced mixed-effects logistic regression"
+
 model_comparison_table
 ```
 
 ```{r}
 #| echo: false
-variance_table
+#| label: tbl-variance-fixed
+#| tbl-cap: "Table 2: Variance components and key fixed effects from full mixed-effects model"
+
+variance_fixed_table
 ```
 
 ## Figures
@@ -254,7 +297,7 @@ variance_table
 ```{r}
 #| echo: false
 #| warning: false
-#| fig-cap: "Called strike rate by pitch location (2025 shadow zone). Solid box = strike zone, dashed box = shadow zone boundary. Interior of strike zone excluded by design."
+#| fig-cap: "Figure 1: Called strike rate by pitch location (2025 shadow zone). Solid box = strike zone, dashed box = shadow zone boundary. Interior of strike zone excluded by design."
 #| label: fig-heatmap
 #| fig-width: 6
 #| fig-height: 5
@@ -265,7 +308,7 @@ heatmap_plot
 ```{r}
 #| echo: false
 #| warning: false
-#| fig-cap: "Distribution of shadow zone pitches per catcher (2025 season). Dashed line indicates 300-pitch minimum threshold."
+#| fig-cap: "Figure 2: Distribution of shadow zone pitches per catcher (2025 season). Dashed line indicates 300-pitch minimum threshold."
 #| label: fig-pitchdist
 #| fig-width: 6
 #| fig-height: 4
@@ -276,7 +319,7 @@ pitchdist_plot
 ```{r}
 #| echo: false
 #| warning: false
-#| fig-cap: "Called strike rate by count in shadow zone (2025 season)."
+#| fig-cap: "Figure 3: Called strike rate by count in shadow zone (2025 season)."
 #| label: fig-countrate
 #| fig-width: 6
 #| fig-height: 5
@@ -287,7 +330,7 @@ countrate_plot
 ```{r}
 #| echo: false
 #| warning: false
-#| fig-cap: "Called strike rate by count and batter handedness (2025 shadow zone)."
+#| fig-cap: "Figure 4: Called strike rate by count and batter handedness (2025 shadow zone)."
 #| label: fig-handedness
 #| fig-width: 6
 #| fig-height: 5
