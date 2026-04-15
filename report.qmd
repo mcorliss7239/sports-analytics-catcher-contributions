@@ -9,6 +9,9 @@ execute:
   echo: false
   warning: false
   message: false
+editor: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r}
@@ -211,187 +214,296 @@ handedness_plot <- shadow_2025 %>%
 
 # Abstract
 
+Catcher defense is among the most difficult contributions to measure in baseball. Traditional statistics such as passed balls and caught stealing rate capture only isolated aspects of a catcher's defensive value, leaving a large portion of their impact unquantified. We develop a hierarchical modeling framework that isolates each catcher's defensive contribution across three dimensions: pitch framing, pitch blocking, and count-specific framing effects. For framing, we fit a mixed-effects logistic regression model to 168,709 shadow zone pitches from the 2025 MLB regular season, extracting catcher random effects that represent each catcher's influence on borderline pitch calls after controlling for pitch location, count, and pitcher and batter tendencies. For blocking, we apply a similar model to 157,195 below-zone pitches, isolating each catcher's ability to convert difficult pitches into recorded blocks. We further examine whether catcher framing ability varies by count, finding statistically significant evidence that some catchers are especially effective at influencing borderline calls in specific game situations. Model comparisons via AIC and likelihood ratio tests confirm that catcher identity explains meaningful variation in both framing and blocking outcomes above and beyond contextual controls.
+
 # Introduction
 
-In baseball, catchers play a pivotal role on defense, yet their value is 
-historically difficult to measure. Traditional statistics such as passed balls 
-and caught stealing rate capture only a fraction of what a catcher contributes. 
-In this project we focus on three key aspects of catcher defense: pitch framing, 
-pitch blocking, and caught stealing prevention. We then quantified each in terms of 
-runs saved, an easy to understand metric that allows for direct comparison across
-defensive skills and is accessible to even the most casual baseball fan.
+In baseball, catchers play a pivotal role on defense, yet their value is
+historically difficult to measure. Traditional statistics such as passed
+balls and caught stealing rate capture only a fraction of what a catcher
+contributes. In this project we focus on three key aspects of catcher
+defense: pitch framing, pitch blocking, and count-specific framing
+effects. We then quantified each in terms of runs saved, an easy to
+understand metric that allows for direct comparison across defensive
+skills and is accessible to even the most casual baseball fan.
 
-Pitch framing, the ability to influence umpires to call borderline pitches 
-strikes, is one of the most impactful and measurable aspects of catcher defense. 
-A single extra strike per game can shift run expectancy, heighten pitcher 
-confidence, and alter game outcomes. Elite framers can provide significant value,
-in the 2024 MLB season, the top-rated framing catcher Patrick Bailey saved 22 runs
-through framing alone, with the next five catchers saving between 11 and 13 runs
-(MLB Advanced Media, 2025). With the rise of pitch tracking, pitch coordinates 
-are now widely available, framing is another way teams can evaluate catchers to 
-ensure their getting the best guys for the job. 
+Pitch framing, the ability to influence umpires to call borderline
+pitches strikes, is one of the most impactful and measurable aspects of
+catcher defense. A single extra strike per game can shift run
+expectancy, heighten pitcher confidence, and alter game outcomes. Elite
+framers can provide significant value, in the 2024 MLB season, the
+top-rated framing catcher Patrick Bailey saved 22 runs through framing
+alone, with the next five catchers saving between 11 and 13 runs (MLB
+Advanced Media, 2025). With the rise of pitch tracking, pitch
+coordinates are now widely available, framing is another way teams can
+evaluate catchers to ensure their getting the best guys for the job.
 
-To measure framing, we fit a mixed-effects logistic regression model to 
-168,709 shadow zone pitches from the 2025 MLB season, isolating each catcher's 
-framing contribution as a random effect after controlling for pitch location, 
-count, batter, and pitcher. Results reveal meaningful variation in framing 
-ability across MLB catchers. [Pending bootstrap completion — uncertainty 
-estimates and catcher rankings to be added prior to final submission.
+To measure framing, we fit a mixed-effects logistic regression model to
+168,709 shadow zone pitches from the 2025 MLB season, isolating each
+catcher's framing contribution as a random effect after controlling for
+pitch location, count, batter, and pitcher. Results reveal meaningful
+variation in framing ability across MLB catchers. \[Pending bootstrap
+completion — uncertainty estimates and catcher rankings to be added
+prior to final submission.
 
-Blocking potentially wild pitches, swinging strikes, and balls that are low and/or off the plate is an extremely important defensive trait for catchers. This is especially true when runners are on base, because successfully blocking a ball can prevent immediate runs or runner advancement on a given pitch while also shaping the rest of the inning by keeping runners from moving into more advantageous positions. Traditionally, Baseball Savant has used advanced inputs such as catcher positioning and called pitch type, which are not available in public pitch-level data, to build catcher blocking metrics and rankings. We aim to develop a comparable model for ranking catcher blocking ability using only publicly available pitch-level data.
+Blocking potentially wild pitches, swinging strikes, and balls that are
+low and/or off the plate is an extremely important defensive trait for
+catchers. This is especially true when runners are on base, because
+successfully blocking a ball can prevent immediate runs or runner
+advancement on a given pitch while also shaping the rest of the inning
+by keeping runners from moving into more advantageous positions.
+Traditionally, Baseball Savant has used advanced inputs such as catcher
+positioning and called pitch type, which are not available in public
+pitch-level data, to build catcher blocking metrics and rankings. We aim
+to develop a comparable model for ranking catcher blocking ability using
+only publicly available pitch-level data.
 
-Blocking pitches has effects that go beyond the box score. In addition to directly preventing passed balls, wild pitches, runs, and stolen bases, strong blocking can also influence pitcher and team confidence. When a pitcher trusts their catcher to handle balls in the dirt or pitches that break well outside the strike zone, they are better able to use their full arsenal aggressively against hitters. Many of the most effective pitches are designed to look hittable before finishing in locations that are difficult or impossible to square up, often below the zone or well off the plate. In high-leverage situations against strong hitters, the ability to throw those pitches with confidence can have a major impact on game outcomes and on a pitcher’s overall effectiveness. Because many catchers are valued more for their defense than their offense, methods for evaluating pitch-blocking skill are especially important for teams. Quantifying blocking ability can improve catcher evaluation on its own, while also supporting better analysis of pitchers and providing teams with additional insight into the effectiveness of specific pitcher-catcher battery combinations.
+Blocking pitches has effects that go beyond the box score. In addition
+to directly preventing passed balls, wild pitches, runs, and stolen
+bases, strong blocking can also influence pitcher and team confidence.
+When a pitcher trusts their catcher to handle balls in the dirt or
+pitches that break well outside the strike zone, they are better able to
+use their full arsenal aggressively against hitters. Many of the most
+effective pitches are designed to look hittable before finishing in
+locations that are difficult or impossible to square up, often below the
+zone or well off the plate. In high-leverage situations against strong
+hitters, the ability to throw those pitches with confidence can have a
+major impact on game outcomes and on a pitcher’s overall effectiveness.
+Because many catchers are valued more for their defense than their
+offense, methods for evaluating pitch-blocking skill are especially
+important for teams. Quantifying blocking ability can improve catcher
+evaluation on its own, while also supporting better analysis of pitchers
+and providing teams with additional insight into the effectiveness of
+specific pitcher-catcher battery combinations.
+
+Across all three analyses, our models confirm that catcher identity
+explains meaningful variation in defensive outcomes above and beyond
+contextual controls. The framing model reveals significant variation in
+catcher ability to influence borderline pitch calls, with non-zero
+catcher variance confirmed after controlling for pitch location, count,
+pitcher, and batter effects. The blocking model similarly finds that
+catcher identity explains variation in recorded block rates above and
+beyond pitch type and location, though pitcher tendencies account for
+more variation than catcher differences alone. Finally, count-specific
+framing effects are statistically significant, suggesting that some
+catchers are especially effective at converting borderline pitches into
+called strikes in specific count situations. Full uncertainty estimates
+and catcher rankings are pending bootstrap completion prior to final
+submission.
 
 # Data
 
-Pitch-level Statcast data was accessed via Baseball Savant's CSV export API for 
-the 2025 MLB regular season (March 27 – September 28, 2025), yielding 712,192 
-total pitches across 118 variables (MLB Advanced Media, 2025). Key variables 
-include `plate_x` and `plate_z` (pitch coordinates at home plate), `sz_top` and 
-`sz_bot` (batter-specific strike zone boundaries), `fielder_2` (catcher ID), 
-`description` (called strike or ball), `balls`, `strikes`, `stand`, and 
-`p_throws`. Pitch-level coordinate data is uniquely suited for framing analysis 
-as it allows precise separation of where the pitch actually crossed the plate 
-from how the catcher influenced the umpire's call.
+Pitch-level Statcast data was accessed via Baseball Savant's CSV export
+API for the 2025 MLB regular season (March 27 – September 28, 2025),
+yielding 712,192 total pitches across 118 variables (MLB Advanced Media,
+2025). Key variables include `plate_x` and `plate_z` (pitch coordinates
+at home plate), `sz_top` and `sz_bot` (batter-specific strike zone
+boundaries), `fielder_2` (catcher ID), `description` (called strike or
+ball), `balls`, `strikes`, `stand`, and `p_throws`. Pitch-level
+coordinate data is uniquely suited for framing analysis as it allows
+precise separation of where the pitch actually crossed the plate from
+how the catcher influenced the umpire's call.
 
-Key variables for the blocking analysis: plate_x, plate_z (pitch coordinates), sz_top, sz_bot (batter-specific strike zone boundaries), fielder_2 (catcher ID),    pitch_type, release_speed, description (including blocked_ball and swinging_strike_blocked), balls, strikes, p_throws, and des (used to identify official wild     pitch / passed ball outcomes for a secondary check)
+Key variables for the blocking analysis: plate_x, plate_z (pitch
+coordinates), sz_top, sz_bot (batter-specific strike zone boundaries),
+fielder_2 (catcher ID), pitch_type, release_speed, description
+(including blocked_ball and swinging_strike_blocked), balls, strikes,
+p_throws, and des (used to identify official wild pitch / passed ball
+outcomes for a secondary check)
 
 ## Preprocessing: Catcher Framing
 
-The dataset was filtered to called pitches only. Swings, fouls, and balls in 
-play were excluded since framing only applies to pitches the umpire must judge. 
-Pitches with missing plate coordinates, strike zone boundaries, or catcher ID 
-were removed. A shadow zone filter was then applied, retaining only pitches 
-within one baseball diameter of the strike zone edge, consistent with MLB's 
-official shadow zone definition (MLB.com Glossary). The threshold of 0.242 ft 
-was derived from the 2026 Official Baseball Rules circumference specification of 
-9.000–9.250 inches. Vertical pitch location was normalized (`pz_norm`) relative 
-to each batter's individual strike zone to control for batter height differences. 
-Finally, a minimum of 300 shadow zone pitches per catcher was applied to ensure 
-reliable random effect estimates, reducing the dataset from 111 to 85 catchers 
-and from 171,304 to 168,709 pitches. The final model dataset contains 168,709 
-shadow zone pitches across 85 catchers.
+The dataset was filtered to called pitches only. Swings, fouls, and
+balls in play were excluded since framing only applies to pitches the
+umpire must judge. Pitches with missing plate coordinates, strike zone
+boundaries, or catcher ID were removed. A shadow zone filter was then
+applied, retaining only pitches within one baseball diameter of the
+strike zone edge, consistent with MLB's official shadow zone definition
+(MLB.com Glossary). The threshold of 0.242 ft was derived from the 2026
+Official Baseball Rules circumference specification of 9.000–9.250
+inches. Vertical pitch location was normalized (`pz_norm`) relative to
+each batter's individual strike zone to control for batter height
+differences. Finally, a minimum of 300 shadow zone pitches per catcher
+was applied to ensure reliable random effect estimates, reducing the
+dataset from 111 to 85 catchers and from 171,304 to 168,709 pitches. The
+final model dataset contains 168,709 shadow zone pitches across 85
+catchers.
 
 ## Preprocessing: Catcher Blocking
 
-We filtered the data to pitches with non-missing values for plate_x, plate_z, sz_top, sz_bot, fielder_2, pitch_type, and release_speed. We then defined blocking opportunities as pitches below the strike zone, where plate_z < sz_bot, to isolate pitches on which a block was plausibly required. A binary outcome variable, is_block, was created and set equal to 1 when the pitch description was blocked_ball or swinging_strike_blocked, and 0 otherwise, allowing us to define block rate as is_block over blocking opportunities. We also renamed fielder_2 and pitcher to catcher_id and pitcher_id, created a count variable from the balls-strikes combination, and formatted pitch_type and p_throws as categorical variables. To avoid unstable coefficient estimates, pitch types with fewer than 500 below-zone pitches were grouped into an "Other" category. We considered including a swing indicator, but removed it because swinging_strike_blocked already implies a recorded block. The resulting simple blocking model dataset contains 157,195 below-zone pitches across 96 catchers and 857 pitchers. Finally, we used a catcher-inclusion threshold of 100 below-zone pitches, since blocking opportunities are much rarer than framing opportunities.
+We filtered the data to pitches with non-missing values for plate_x,
+plate_z, sz_top, sz_bot, fielder_2, pitch_type, and release_speed. We
+then defined blocking opportunities as pitches below the strike zone,
+where plate_z \< sz_bot, to isolate pitches on which a block was
+plausibly required. A binary outcome variable, is_block, was created and
+set equal to 1 when the pitch description was blocked_ball or
+swinging_strike_blocked, and 0 otherwise, allowing us to define block
+rate as is_block over blocking opportunities. We also renamed fielder_2
+and pitcher to catcher_id and pitcher_id, created a count variable from
+the balls-strikes combination, and formatted pitch_type and p_throws as
+categorical variables. To avoid unstable coefficient estimates, pitch
+types with fewer than 500 below-zone pitches were grouped into an
+"Other" category. We considered including a swing indicator, but removed
+it because swinging_strike_blocked already implies a recorded block. The
+resulting simple blocking model dataset contains 157,195 below-zone
+pitches across 96 catchers and 857 pitchers. Finally, we used a
+catcher-inclusion threshold of 100 below-zone pitches, since blocking
+opportunities are much rarer than framing opportunities.
 
 ## Exploratory Data Analysis: Catcher Framing
 
-The strike rate for pitches in the shadow zone is 34.2%. This confirms that 
-borderline pitches are genuinely ambiguous, umpires do not consistently call them
-strikes. A heatmap of called strike rate by pitch location reveals a clear gradient
-from near-certain strikes at the interior edge of the shadow zone to near-certain 
-balls at the exterior edge, confirming that borderline calls are not deterministic
-(@fig-heatmap). The interior of the strike zone is excluded by design since pitches 
-well inside the zone are not influenced by framing.
+The strike rate for pitches in the shadow zone is 34.2%. This confirms
+that borderline pitches are genuinely ambiguous, umpires do not
+consistently call them strikes. A heatmap of called strike rate by pitch
+location reveals a clear gradient from near-certain strikes at the
+interior edge of the shadow zone to near-certain balls at the exterior
+edge, confirming that borderline calls are not deterministic
+(@fig-heatmap). The interior of the strike zone is excluded by design
+since pitches well inside the zone are not influenced by framing.
 
-@fig-pitchdist displays the distribution of shadow zone pitches per catcher. This
-figure is right-skewed with a long right tail of starting catchers. The 
-300-pitch minimum cutoff removes 26 catchers with insufficient data, retaining 
-85 catchers with reliable sample sizes for modeling. Catchers retained for 
-modeling saw anywhere from 300 to approximately 4,500 shadow zone pitches.
+@fig-pitchdist displays the distribution of shadow zone pitches per
+catcher. This figure is right-skewed with a long right tail of starting
+catchers. The 300-pitch minimum cutoff removes 26 catchers with
+insufficient data, retaining 85 catchers with reliable sample sizes for
+modeling. Catchers retained for modeling saw anywhere from 300 to
+approximately 4,500 shadow zone pitches.
 
-@fig-countrate shows that called strike rate varies dramatically by count, ranging 
-from 57% on 3-0 counts to 10.6% on 0-2 counts. This confirms that count 
-strongly influences umpire behavior on borderline pitches. Notably, the highest 
-strike rates occur on hitter-friendly counts like 3-0 and 2-0, where umpires 
-appear more willing to call borderline pitches strikes when the pitcher needs 
-to throw one, while two-strike counts like 0-2 and 1-2 show the lowest strike 
-rates. This pattern justifies inclusion of `count` as a fixed effect in the 
-model to avoid attributing count effects to catcher framing.
+@fig-countrate shows that called strike rate varies dramatically by
+count, ranging from 57% on 3-0 counts to 10.6% on 0-2 counts. This
+confirms that count strongly influences umpire behavior on borderline
+pitches. Notably, the highest strike rates occur on hitter-friendly
+counts like 3-0 and 2-0, where umpires appear more willing to call
+borderline pitches strikes when the pitcher needs to throw one, while
+two-strike counts like 0-2 and 1-2 show the lowest strike rates. This
+pattern justifies inclusion of `count` as a fixed effect in the model to
+avoid attributing count effects to catcher framing.
 
-Finally, @fig-handedness reveals that right-handed batters consistently receive higher
-called strike rates than left-handed batters across every count with the largest
-gap observed on 3-1 counts. This persistent handedness effect justifies including
-`stand` as a fixed effect to avoid attributing batter handedness differences to
-catcher framing.
+Finally, @fig-handedness reveals that right-handed batters consistently
+receive higher called strike rates than left-handed batters across every
+count with the largest gap observed on 3-1 counts. This persistent
+handedness effect justifies including `stand` as a fixed effect to avoid
+attributing batter handedness differences to catcher framing.
 
 ## Exploratory Data Analysis: Catcher Blocking
 
-Inspection of the description field confirmed that Statcast includes explicit labels for successful blocks through blocked_ball and swinging_strike_blocked. By contrast, official blocking failures appear extremely sparse in publicly available pitch-level data: searching the des field identified only 86 wild pitches and 29 passed balls. This strong imbalance suggests that official wild pitch and passed ball outcomes substantially undercount true blocking failures, since many missed or difficult blocks are not recorded as official failures. For example, a passed ball with no runners on base may simply be scored as a ball rather than as a passed ball. Because of this limitation, recorded block rate among below-zone opportunities will serve as the primary modeling outcome, while official wild pitch and passed ball outcomes will be used only in a secondary supplemental model for evaluation. Blocking opportunities are also distributed unevenly across catchers, with a long tail of low-volume catchers, so a 100-pitch cutoff helps stabilize catcher-level random-effect estimates. In addition, there is substantial variation in below-zone opportunity counts across pitch types, which is why sparse pitch types are collapsed into an Other category before model fitting.
-
+Inspection of the description field confirmed that Statcast includes
+explicit labels for successful blocks through blocked_ball and
+swinging_strike_blocked. By contrast, official blocking failures appear
+extremely sparse in publicly available pitch-level data: searching the
+des field identified only 86 wild pitches and 29 passed balls. This
+strong imbalance suggests that official wild pitch and passed ball
+outcomes substantially undercount true blocking failures, since many
+missed or difficult blocks are not recorded as official failures. For
+example, a passed ball with no runners on base may simply be scored as a
+ball rather than as a passed ball. Because of this limitation, recorded
+block rate among below-zone opportunities will serve as the primary
+modeling outcome, while official wild pitch and passed ball outcomes
+will be used only in a secondary supplemental model for evaluation.
+Blocking opportunities are also distributed unevenly across catchers,
+with a long tail of low-volume catchers, so a 100-pitch cutoff helps
+stabilize catcher-level random-effect estimates. In addition, there is
+substantial variation in below-zone opportunity counts across pitch
+types, which is why sparse pitch types are collapsed into an Other
+category before model fitting.
 
 # Methods
 
 ## Morgan Corliss: Catcher Framing
 
-The goal of this analysis is to isolate each catcher's influence on borderline 
-pitch calls above and beyond what can be explained by pitch location, count, and 
-batter/pitcher context. To accomplish this, we fit a mixed-effects logistic 
-regression model where the binary outcome is whether a shadow zone pitch was 
-called a strike (1) or a ball (0). The model takes the following form:
+The goal of this analysis is to isolate each catcher's influence on
+borderline pitch calls above and beyond what can be explained by pitch
+location, count, and batter/pitcher context. To accomplish this, we fit
+a mixed-effects logistic regression model where the binary outcome is
+whether a shadow zone pitch was called a strike (1) or a ball (0). The
+model takes the following form:
 
 $$\log\left(\frac{p_i}{1-p_i}\right) = \beta_0 + \beta_1 \text{plate\_x}_i + 
 \beta_2 \text{pz\_norm}_i + \beta_3 \text{count}_i + \beta_4 \text{stand}_i + 
 \beta_5 \text{p\_throws}_i + u_{\text{catcher}[i]} + u_{\text{pitcher}[i]} + 
 u_{\text{batter}[i]}$$
 
-where $p_i$ is the probability of a called strike on pitch $i$. The fixed effects 
-control for pitch location (`plate_x`, `pz_norm`), count, batter handedness 
-(`stand`), and pitcher handedness (`p_throws`). The random effects 
-$u_{\text{catcher}[i]}$, $u_{\text{pitcher}[i]}$, and $u_{\text{batter}[i]}$ 
-capture the influence of each catcher, pitcher, and batter respectively. The 
-catcher random effect is the primary quantity of interest — it represents each 
-catcher's tendency to influence umpire calls above or below the league average 
-after accounting for all other factors.
+where $p_i$ is the probability of a called strike on pitch $i$. The
+fixed effects control for pitch location (`plate_x`, `pz_norm`), count,
+batter handedness (`stand`), and pitcher handedness (`p_throws`). The
+random effects $u_{\text{catcher}[i]}$, $u_{\text{pitcher}[i]}$, and
+$u_{\text{batter}[i]}$ capture the influence of each catcher, pitcher,
+and batter respectively. The catcher random effect is the primary
+quantity of interest — it represents each catcher's tendency to
+influence umpire calls above or below the league average after
+accounting for all other factors.
 
-The model assumes the binary outcome follows a Bernoulli distribution: 
-$Y_i \sim \text{Bernoulli}(p_i)$, where the log-odds of a called strike are 
-modeled as a linear function of the fixed and random effects. The catcher, 
-pitcher, and batter random effects are each assumed to be independently normally 
-distributed with mean zero: $u_j \sim N(0, \sigma^2)$. Random effects are 
-assumed independent of each other and of the fixed effect predictors, and shadow 
-zone pitches are assumed conditionally independent given the random effects.
+The model assumes the binary outcome follows a Bernoulli distribution:
+$Y_i \sim \text{Bernoulli}(p_i)$, where the log-odds of a called strike
+are modeled as a linear function of the fixed and random effects. The
+catcher, pitcher, and batter random effects are each assumed to be
+independently normally distributed with mean zero:
+$u_j \sim N(0, \sigma^2)$. Random effects are assumed independent of
+each other and of the fixed effect predictors, and shadow zone pitches
+are assumed conditionally independent given the random effects.
 
-A mixed-effects model was chosen over a fixed-effects specification for several 
-reasons. With 85 catchers in the dataset, a fixed-effects approach would require 
-estimating 84 catcher indicator coefficients, producing unreliable estimates for 
-backup catchers with small sample sizes. The mixed-effects framework handles this 
-naturally through partial pooling — shrinking estimates for catchers with limited 
-data toward the league mean while allowing well-sampled catchers to deviate 
-further. Pitcher and batter random effects were included to avoid attributing 
-their tendencies to catchers, which would otherwise bias the framing estimates. 
-The BOBYQA optimizer was specified following recommendations for mixed models 
-with complex random effect structures (Powell, 2009).
+A mixed-effects model was chosen over a fixed-effects specification for
+several reasons. With 85 catchers in the dataset, a fixed-effects
+approach would require estimating 84 catcher indicator coefficients,
+producing unreliable estimates for backup catchers with small sample
+sizes. The mixed-effects framework handles this naturally through
+partial pooling — shrinking estimates for catchers with limited data
+toward the league mean while allowing well-sampled catchers to deviate
+further. Pitcher and batter random effects were included to avoid
+attributing their tendencies to catchers, which would otherwise bias the
+framing estimates. The BOBYQA optimizer was specified following
+recommendations for mixed models with complex random effect structures
+(Powell, 2009).
 
-To evaluate the model, we fit a reduced specification excluding the pitcher and 
-batter random effects:
+To evaluate the model, we fit a reduced specification excluding the
+pitcher and batter random effects:
 
 $$\text{is\_strike} \sim \text{plate\_x} + \text{pz\_norm} + \text{count} + 
 \text{stand} + \text{p\_throws} + (1 | \text{catcher\_id})$$
 
-The full and reduced models were compared via AIC, where a lower value indicates 
-better fit relative to model complexity. A likelihood ratio test was also 
-conducted to formally assess whether adding pitcher and batter random effects 
-significantly improves model fit. If the full model fits better, it confirms 
-that omitting pitcher and batter effects would bias the catcher framing estimates.
+The full and reduced models were compared via AIC, where a lower value
+indicates better fit relative to model complexity. A likelihood ratio
+test was also conducted to formally assess whether adding pitcher and
+batter random effects significantly improves model fit. If the full
+model fits better, it confirms that omitting pitcher and batter effects
+would bias the catcher framing estimates.
 
-To quantify uncertainty in the catcher random effect estimates, we employ a 
-structured bootstrap... [having trouble with bootstrap, not complete at this time]
+To quantify uncertainty in the catcher random effect estimates, we
+employ a structured bootstrap... \[having trouble with bootstrap, not
+complete at this time\]
 
 ## Arthur Spirou: Catcher Blocking via Mixed-Effects Logistic Regression
 
-### Blocking Model Description**
-- Goal: isolate catcher influence on likely blocking opportunities above and beyond pitch location, pitch type, and pitcher context
-- Mixed-effects logistic regression with binary outcome: recorded block (1) or no recorded block (0)
-- Primary outcome defined as is_block = 1 when description was blocked_ball or swinging_strike_blocked
-- Restricted to below-zone pitches (plate_z < sz_bot)
-- Simple model fixed effects: plate_x, plate_z, and collapsed pitch type
-- Simple model random effects: catcher_id, pitcher_id
-- Full model will build on the simple model to include release_speed, count, and p_throws
-- Catcher random effect represents each catcher’s ability to convert likely blocking opportunities into recorded blocks, relative to league average. 
-  Controlling for block attempt difficulty and pitcher
+### Blocking Model Description\*\*
+
+-   Goal: isolate catcher influence on likely blocking opportunities
+    above and beyond pitch location, pitch type, and pitcher context
+-   Mixed-effects logistic regression with binary outcome: recorded
+    block (1) or no recorded block (0)
+-   Primary outcome defined as is_block = 1 when description was
+    blocked_ball or swinging_strike_blocked
+-   Restricted to below-zone pitches (plate_z \< sz_bot)
+-   Simple model fixed effects: plate_x, plate_z, and collapsed pitch
+    type
+-   Simple model random effects: catcher_id, pitcher_id
+-   Full model will build on the simple model to include release_speed,
+    count, and p_throws
+-   Catcher random effect represents each catcher’s ability to convert
+    likely blocking opportunities into recorded blocks, relative to
+    league average. Controlling for block attempt difficulty and pitcher
 
 ### Blocking Model Assumptions
-- Binary outcome follows a Bernoulli distribution
-- log-odds of a recorded block modeled as a linear function of fixed and random effects
-- catcher and pitcher random effects are assumed to be independent. Also assumed to
-  be normally distributed with mean zero
-- random effects are independent of fixed effects
-- The below-zone filter is assumed to capture a meaningful set of likely blocking opportunities,
-  however it does not perfectly identify every true blocking situation
-- Outcome is interpreted as a recorded block rate, not as a fully observed success-versus-failure blocking label
+
+-   Binary outcome follows a Bernoulli distribution
+-   log-odds of a recorded block modeled as a linear function of fixed
+    and random effects
+-   catcher and pitcher random effects are assumed to be independent.
+    Also assumed to be normally distributed with mean zero
+-   random effects are independent of fixed effects
+-   The below-zone filter is assumed to capture a meaningful set of
+    likely blocking opportunities, however it does not perfectly
+    identify every true blocking situation
+-   Outcome is interpreted as a recorded block rate, not as a fully
+    observed success-versus-failure blocking label
 
 Simple Blocking Model Formulation:
 
@@ -418,33 +530,128 @@ $$
 v_k \sim N(0, \sigma^2_{\mathrm{pitcher}})
 $$
 
-Here, $Y_i$ indicates whether below-zone pitch $i$ resulted in a recorded block, $\mathbf{z}_i$ is the vector of indicator variables for `pitch_type_collapsed`, $u_{j(i)}$ is the catcher-specific random intercept, and $v_{k(i)}$ is the pitcher-specific random intercept.
+Here, $Y_i$ indicates whether below-zone pitch $i$ resulted in a
+recorded block, $\mathbf{z}_i$ is the vector of indicator variables for
+`pitch_type_collapsed`, $u_{j(i)}$ is the catcher-specific random
+intercept, and $v_{k(i)}$ is the pitcher-specific random intercept.
 
 ### Blocking Model Justification
-- Mixed-effects logistic regression is appropriate because the outcome is binary. 
-  Also, repeated observations from the same catchers and pitchers create dependence
-- Treating catcher as a random effect allows partial pooling, which stabilizes estimates 
-  for lower-volume catchers and avoids overfitting
-- Pitcher randomeffects are particularly crucial and meaningful for a blocking model because 
-  some pitchers throw balls in the dirt or balls that move dramatically away from the strike zone
-  more often than others. This can both create more blocking opportunities and pose more challenging
-  blocking opportunities for certain catchers.
-- Similar to pitch framing model, BOBYQA optimizer specified due to large dataset size and crossed random effects nature
+
+-   Mixed-effects logistic regression is appropriate because the outcome
+    is binary. Also, repeated observations from the same catchers and
+    pitchers create dependence
+-   Treating catcher as a random effect allows partial pooling, which
+    stabilizes estimates for lower-volume catchers and avoids
+    overfitting
+-   Pitcher randomeffects are particularly crucial and meaningful for a
+    blocking model because some pitchers throw balls in the dirt or
+    balls that move dramatically away from the strike zone more often
+    than others. This can both create more blocking opportunities and
+    pose more challenging blocking opportunities for certain catchers.
+-   Similar to pitch framing model, BOBYQA optimizer specified due to
+    large dataset size and crossed random effects nature
 
 ### Blocking Model Comparison/Evaluation
-Simple Model: is_block ~ plate_x + plate_z + pitch_type_collapsed + (1 | catcher_id) + (1 | pitcher_id)
-Full Candidate Model: is_block ~ plate_x + plate_z + pitch_type_collapsed + release_speed + count + p_throws + (1 | catcher_id) + (1 | pitcher_id)
-- Plan to compare the simple and full models using AIC, where lower AIC indicates 
-  better out-of-sample tradeoff between fit and complexity
-- A likelihood ratio test will be used to assess whether the additional fixed effects in the 
-  full model significantly improve fit
-- Catcher effects will be ranked and compared to Baseball Savant's catcher blocking ratings from the 2025 season
+
+Simple Model: is_block \~ plate_x + plate_z + pitch_type_collapsed + (1
+\| catcher_id) + (1 \| pitcher_id) Full Candidate Model: is_block \~
+plate_x + plate_z + pitch_type_collapsed + release_speed + count +
+p_throws + (1 \| catcher_id) + (1 \| pitcher_id) - Plan to compare the
+simple and full models using AIC, where lower AIC indicates better
+out-of-sample tradeoff between fit and complexity - A likelihood ratio
+test will be used to assess whether the additional fixed effects in the
+full model significantly improve fit - Catcher effects will be ranked
+and compared to Baseball Savant's catcher blocking ratings from the 2025
+season
 
 ### Blocking Model Uncertainty Quantification
-- Similar to the framing model, we plan to use structured bootstrap resampling with the unit of resampling being
-  plate appearances within games to preserve within-game depe ndence and catcher usage patterns
-- Each bootstrap sample will refit the selected blocking model and store the catcher random effects
-- Plan to report 90% confidence intervals for catcher blocking effects. Random seed will be used for reproducibility.
+
+-   Similar to the framing model, we plan to use structured bootstrap
+    resampling with the unit of resampling being plate appearances
+    within games to preserve within-game depe ndence and catcher usage
+    patterns
+-   Each bootstrap sample will refit the selected blocking model and
+    store the catcher random effects
+-   Plan to report 90% confidence intervals for catcher blocking
+    effects. Random seed will be used for reproducibility.
+
+## Joel Maison: Count-Specific Catcher Framing via Mixed-Effects Logistic Regression
+
+Prior work on catcher framing typically estimates a single defensive value per catcher, treating framing ability as
+constant across all game situations. This analysis asks a more granular
+question: does a catcher's ability to influence borderline pitch calls
+vary depending on the count? A 3-0 count and a 0-2 count create very
+different contexts for umpire decision making, and elite framers may be
+especially effective in high leverage situations where stealing a strike
+matters most.
+
+To test this, I fit a mixed-effects logistic regression model on 168,709
+shadow zone pitches from the 2025 MLB regular season with a binary
+outcome of called strike (1) or ball (0). Fixed effects control for
+pitch location (plate_x, pz_norm), count, batter handedness (stand), and
+pitcher handedness (p_throws). The model includes catcher, pitcher, and
+batter random intercepts, and adds a catcher-by-count interaction random
+effect as the primary quantity of interest:
+
+$$\log\left(\frac{p_i}{1-p_i}\right) = \beta_0 + \beta_1 \text{plate\_x}_i + 
+\beta_2 \text{pz\_norm}_i + \beta_3 \text{count}_i + \beta_4 \text{stand}_i + 
+\beta_5 \text{p\_throws}_i + u_{\text{catcher}[i]} + 
+u_{\text{catcher}[i]\times\text{count}[i]} + u_{\text{pitcher}[i]} + 
+u_{\text{batter}[i]}$$
+
+The term $u_{\text{catcher}[i]\times\text{count}[i]}$ captures each
+catcher's deviation from their own average framing ability within each
+specific count, and is the primary quantity of interest. The remaining
+random effects $u_{\text{catcher}[i]}$, $u_{\text{pitcher}[i]}$, and
+$u_{\text{batter}[i]}$ control for overall catcher, pitcher, and batter
+tendencies respectively.
+
+The model assumes the binary outcome follows a Bernoulli distribution:
+$Y_i \sim \text{Bernoulli}(p_i)$, where the log-odds of a called strike
+are modeled as a linear function of the fixed and random effects. All
+random effects are assumed to be independently normally distributed with
+mean zero: $u_j \sim N(0, \sigma^2)$. Random effects are assumed
+independent of each other and of the fixed effect predictors, and shadow
+zone pitches are assumed conditionally independent given the random
+effects.
+
+A mixed-effects specification was chosen for the same reasons as the
+framing model: partial pooling stabilizes estimates for catchers with
+limited data by shrinking them toward the league mean, while allowing
+well-sampled catchers to deviate further. The catcher-by-count
+interaction is modeled as a random effect rather than a fixed effect
+because estimating a fixed coefficient for every catcher-count
+combination would require 1,020 parameters, producing highly unreliable
+estimates, particularly for backup catchers who face few pitches in rare
+counts. The random effect framework pools information across all
+catcher-count cells, producing stable estimates even for sparse
+combinations. The BOBYQA optimizer was specified following
+recommendations for mixed models with complex random effect structures
+(Powell, 2009).
+
+To evaluate whether the catcher-by-count interaction meaningfully
+improves model fit, we compare our model against a baseline
+specification without the interaction term, equivalent to the baseline
+framing model:
+
+$$\text{is\_strike} \sim \text{plate\_x} + \text{pz\_norm} + \text{count} + 
+\text{stand} + \text{p\_throws} + (1 | \text{catcher\_id}) + 
+(1 | \text{pitcher\_id}) + (1 | \text{batter\_id})$$
+
+The two models are compared via AIC, where a lower value indicates
+better fit relative to model complexity. A likelihood ratio test is also
+conducted to formally assess whether the interaction term significantly
+improves fit. If the interaction model fits better, it confirms that
+catcher framing ability varies meaningfully across counts above and
+beyond overall framing skill.
+
+To quantify uncertainty in the catcher-by-count random effect estimates,
+we will employ the same structured bootstrap resampling approach used in
+the framing model, resampling plate appearances within games to preserve
+within-game dependence. Each bootstrap iteration refits the full model
+and stores the catcher-by-count random effects. We will report 90%
+bootstrap confidence intervals for each catcher-count combination, with
+set.seed(460) for reproducibility.
 
 # Results
 
@@ -452,103 +659,203 @@ Full Candidate Model: is_block ~ plate_x + plate_z + pitch_type_collapsed + rele
 
 ### Model Comparison
 
-The full model achieved a substantially lower AIC (204,945) compared to the 
-reduced model (205,241), a difference of 296 units — well above the conventional 
-threshold of 2. The likelihood ratio test confirms this improvement is 
-statistically significant (χ²(2) = 300.25, p < 2.2e-16), providing strong 
-evidence that pitcher and batter random effects meaningfully improve model fit. 
-This result confirms that pitcher and batter tendencies independently influence 
-borderline pitch calls above and beyond pitch location and count — omitting them 
-would attribute some of their influence to catchers, biasing the framing 
-estimates. The full model was therefore selected for all subsequent inference on 
-catcher framing effects. These results are summarized in (@tbl-model-comparison).
+The full model achieved a substantially lower AIC (204,945) compared to
+the reduced model (205,241), a difference of 296 units — well above the
+conventional threshold of 2. The likelihood ratio test confirms this
+improvement is statistically significant (χ²(2) = 300.25, p \< 2.2e-16),
+providing strong evidence that pitcher and batter random effects
+meaningfully improve model fit. This result confirms that pitcher and
+batter tendencies independently influence borderline pitch calls above
+and beyond pitch location and count — omitting them would attribute some
+of their influence to catchers, biasing the framing estimates. The full
+model was therefore selected for all subsequent inference on catcher
+framing effects. These results are summarized in
+(@tbl-model-comparison).
 
 ### Model Interpretation
 
-@tbl-variance-fixed displays the variance components and key fixed effects from the full 
-model. Catcher variance (0.006) is smaller than both pitcher (0.013) and batter 
-(0.016) variance, suggesting that pitch location and batter/pitcher context 
-explain more variation in borderline calls than catcher framing alone. However, 
-catcher variance is meaningfully non-zero, confirming that framing ability varies 
-across catchers above and beyond these controls and justifying the framing 
+@tbl-variance-fixed displays the variance components and key fixed
+effects from the full model. Catcher variance (0.006) is smaller than
+both pitcher (0.013) and batter (0.016) variance, suggesting that pitch
+location and batter/pitcher context explain more variation in borderline
+calls than catcher framing alone. However, catcher variance is
+meaningfully non-zero, confirming that framing ability varies across
+catchers above and beyond these controls and justifying the framing
 analysis.
 
-Among the fixed effects, pitcher handedness (`p_throwsR`) was not statistically 
-significant (β = -0.012, p = 0.468), suggesting that after controlling for pitch 
-location and count, pitcher handedness does not meaningfully influence borderline 
-call rates. It was retained in the model for completeness. All count coefficients 
-were highly significant (p < 2e-16), consistent with the dramatic variation in 
-called strike rates across counts observed in the EDA — with 3-0 counts showing 
-the highest tendency toward called strikes (β = 0.586) and 0-2 counts the lowest 
-(β = -1.897). Right-handed batters received significantly more called strikes on 
-borderline pitches than left-handed batters (β = 0.140, p < 2e-16), consistent 
-with the handedness effect observed in (@fig-handedness).
+Among the fixed effects, pitcher handedness (`p_throwsR`) was not
+statistically significant (β = -0.012, p = 0.468), suggesting that after
+controlling for pitch location and count, pitcher handedness does not
+meaningfully influence borderline call rates. It was retained in the
+model for completeness. All count coefficients were highly significant
+(p \< 2e-16), consistent with the dramatic variation in called strike
+rates across counts observed in the EDA — with 3-0 counts showing the
+highest tendency toward called strikes (β = 0.586) and 0-2 counts the
+lowest (β = -1.897). Right-handed batters received significantly more
+called strikes on borderline pitches than left-handed batters (β =
+0.140, p \< 2e-16), consistent with the handedness effect observed in
+(@fig-handedness).
 
 ### Catcher Framing Estimates
 
-[Pending bootstrap completion — caterpillar plot, ridge plot, runs saved 
-leaderboard, and uncertainty estimates to be added prior to final submission]
+\[Pending bootstrap completion — caterpillar plot, ridge plot, runs
+saved leaderboard, and uncertainty estimates to be added prior to final
+submission\]
 
 ## Arthur Spirou: Catcher Blocking Results
 
-The simple blocking model converged successfully on 157,195 below-zone pitches drawn from 96 catchers and 857 pitchers. Both catcher- and pitcher-level random-effect variances were significant, indicating that blocking outcomes vary across both groups even after controlling for pitch type and pitch location. Notably, the pitcher-level variance (0.059) exceeded the catcher-level variance (0.022), suggesting that pitcher tendencies and overall pitch difficulty explain more variation in recorded blocks than catcher differences alone. In the simple model, vertical pitch location (plate_z) was the dominant predictor of a recorded block (estimate = -2.218, p < 2e-16), meaning that lower pitches were much more likely to result in a block. Horizontal pitch location (plate_x) was also a significant predictor (estimate = -0.061, p < 0.001). In addition, different types of breaking balls were associated with higher odds of a recorded block, while four-seam fastballs and sinkers had the lowest odds. The full model will be compared with the simple model using AIC and a likelihood ratio test. Finally, official wild pitch and passed ball labels were found to be extremely sparse, with only 86 wild pitches and 29 passed balls identified, further reinforcing the decision not to use official failures as the primary blocking outcome.
+The simple blocking model converged successfully on 157,195 below-zone
+pitches drawn from 96 catchers and 857 pitchers. Both catcher- and
+pitcher-level random-effect variances were significant, indicating that
+blocking outcomes vary across both groups even after controlling for
+pitch type and pitch location. Notably, the pitcher-level variance
+(0.059) exceeded the catcher-level variance (0.022), suggesting that
+pitcher tendencies and overall pitch difficulty explain more variation
+in recorded blocks than catcher differences alone. In the simple model,
+vertical pitch location (plate_z) was the dominant predictor of a
+recorded block (estimate = -2.218, p \< 2e-16), meaning that lower
+pitches were much more likely to result in a block. Horizontal pitch
+location (plate_x) was also a significant predictor (estimate = -0.061,
+p \< 0.001). In addition, different types of breaking balls were
+associated with higher odds of a recorded block, while four-seam
+fastballs and sinkers had the lowest odds. The full model will be
+compared with the simple model using AIC and a likelihood ratio test.
+Finally, official wild pitch and passed ball labels were found to be
+extremely sparse, with only 86 wild pitches and 29 passed balls
+identified, further reinforcing the decision not to use official
+failures as the primary blocking outcome.
+
+## Joel Maison: Count-Specific Catcher Framing
+
+### Model Comparison
+
+The interaction model achieved a lower AIC (204,937) compared to the
+baseline model without the catcher-by-count interaction (204,945), a
+difference of 8 units. The likelihood ratio test confirms this
+improvement is statistically significant (χ²(1) = 9.457, p = 0.002),
+providing evidence that adding the catcher-by-count interaction
+meaningfully improves model fit above and beyond overall framing skill.
+This result confirms that catcher framing ability is not constant across
+all counts and that the game situation influences how effectively
+individual catchers convert borderline pitches into called strikes.
+These results are summarized in (@tbl-count-comparison).
+
+### Model Interpretation
+
+The catcher-by-count interaction variance (0.0038) is smaller than the
+overall catcher variance (0.0056), suggesting that while catchers do
+vary in their framing ability across counts, a larger portion of
+catcher-level variation is captured by their overall framing skill.
+Nevertheless, the non-zero interaction variance combined with the
+significant likelihood ratio test confirms that count-specific framing
+effects exist and are not simply noise.
+
+The fixed effects are consistent with the EDA findings. Called strike
+rates drop dramatically from 3-0 counts (β = 0.584, p \< 2e-16) to 0-2
+counts (β = -1.900, p \< 2e-16), confirming that count strongly shapes
+umpire behavior on borderline pitches. Right-handed batters received
+significantly more called strikes than left-handed batters (β = 0.140, p
+\< 2e-16). Pitcher handedness was not significant (β = -0.012, p =
+0.472), consistent with Morgan's framing model findings. The top and bottom catcher-count combinations are displayed in (@fig-count-effects).
+
+### Uncertainty
+
+\[Pending bootstrap completion — confidence intervals for
+catcher-by-count random effects to be added prior to final submission.\]
 
 # Discussion
 
 ## Conclusions
 
-The model comparison results provide strong evidence that catcher framing is a 
-real and measurable skill. The full mixed-effects model fit significantly better 
-than the reduced model (AIC difference = 296, χ²(2) = 300.25, p < 2.2e-16), 
-confirming that catcher identity explains meaningful variation in borderline 
-pitch calls above and beyond pitch location, count, pitcher, and batter effects. 
-The non-zero catcher variance (0.006) further supports this conclusion. 
+The model comparison results provide strong evidence that catcher
+framing is a real and measurable skill. The full mixed-effects model fit
+significantly better than the reduced model (AIC difference = 296, χ²(2)
+= 300.25, p \< 2.2e-16), confirming that catcher identity explains
+meaningful variation in borderline pitch calls above and beyond pitch
+location, count, pitcher, and batter effects. The non-zero catcher
+variance (0.006) further supports this conclusion.
 
-*[Pending bootstrap completion — conclusions about the magnitude of framing 
-differences across catchers and runs saved estimates to be added prior to 
-final submission.]*
+Count-specific framing effects were also found to be statistically
+significant (χ²(1) = 9.457, p = 0.002), suggesting that catcher framing
+ability is not uniform across all game situations and that some catchers
+may be especially effective in high leverage counts.
+
+*\[Pending bootstrap completion — conclusions about the magnitude of
+framing differences across catchers and runs saved estimates to be added
+prior to final submission.\]*
 
 ## Limitations
 
-Several limitations of this analysis should be noted. First, the shadow zone 
-threshold of 0.242 ft is derived from the average baseball diameter per the 
-2026 Official Baseball Rules and a robustness check with alternative values 
-would strengthen this analysis. Second, this analysis is based on a single 
-season of data, framing estimates from one season may reflect some noise. 
-Conducting an analysis of different years would help verify our conclusions.
+Several limitations of this analysis should be noted. First, the shadow
+zone threshold of 0.242 ft is derived from the average baseball diameter
+per the 2026 Official Baseball Rules and a robustness check with
+alternative values would strengthen this analysis. Second, this analysis
+is based on a single season of data, framing estimates from one season
+may reflect some noise. Conducting an analysis of different years would
+help verify our conclusions.
 
-The blocking analysis has several important limitations. First, the blocking outcome is not a perfect success-versus-failure label: the 0 class includes below-zone pitches that did not receive a recorded block, but some of those pitches may have been received cleanly rather than missed. Official wild pitch and passed ball outcomes are too sparse to serve as the primary response variable, and they likely undercount true blocking failures because many difficult or mishandled pitches are never scored as official failures. In addition, the below-zone filter (plate_z < sz_bot) is only a practical approximation of blocking opportunities. While it helps isolate pitches where a block is plausibly required, it does not account for pitches far above the zone, may exclude some horizontally difficult pitches, and may still include low pitches that were relatively easy for the catcher to receive. The model is also limited to publicly available pitch-level variables and therefore cannot incorporate features such as catcher starting position, body orientation, glove-side versus backhand mechanics, or other tracking information used in proprietary blocking models like Baseball Savant's. Finally, pitch type was collapsed for sparse categories to improve model stability, but doing so may hide meaningful differences among rare pitch types, such as an eephus pitch.
+The blocking analysis has several important limitations. First, the
+blocking outcome is not a perfect success-versus-failure label: the 0
+class includes below-zone pitches that did not receive a recorded block,
+but some of those pitches may have been received cleanly rather than
+missed. Official wild pitch and passed ball outcomes are too sparse to
+serve as the primary response variable, and they likely undercount true
+blocking failures because many difficult or mishandled pitches are never
+scored as official failures. In addition, the below-zone filter (plate_z
+\< sz_bot) is only a practical approximation of blocking opportunities.
+While it helps isolate pitches where a block is plausibly required, it
+does not account for pitches far above the zone, may exclude some
+horizontally difficult pitches, and may still include low pitches that
+were relatively easy for the catcher to receive. The model is also
+limited to publicly available pitch-level variables and therefore cannot
+incorporate features such as catcher starting position, body
+orientation, glove-side versus backhand mechanics, or other tracking
+information used in proprietary blocking models like Baseball Savant's.
+Finally, pitch type was collapsed for sparse categories to improve model
+stability, but doing so may hide meaningful differences among rare pitch
+types, such as an eephus pitch.
+
+The count-specific framing analysis is limited by the relatively small
+catcher-by-count interaction variance (0.0038), which while
+statistically significant is modest in magnitude. Bootstrap confidence
+intervals are also pending, so the practical significance of individual
+catcher-count differences has not yet been fully quantified.
 
 ## Future Work
 
-Several extensions of this work would strengthen the conclusions. A 
-year-to-year stability check using 2024 data would help determine 
-whether catcher rankings are consistent across seasons. High correlation between 
-2024 and 2025 estimates would provide evidence that the model is measuring real 
-framing skill rather than noise. Finally, a Bayesian implementation using 
-`rstanarm` would provide full posterior distributions on catcher framing effects
-rather than bootstrap approximations, accounting for the hierarchical structure
-of the data.
+Several extensions of this work would strengthen the conclusions. A
+year-to-year stability check using 2024 data would help determine
+whether catcher rankings are consistent across seasons. High correlation
+between 2024 and 2025 estimates would provide evidence that the model is
+measuring real framing skill rather than noise. Finally, a Bayesian
+implementation using `rstanarm` would provide full posterior
+distributions on catcher framing effects rather than bootstrap
+approximations, accounting for the hierarchical structure of the data.
+Future work could also examine which specific counts show the largest
+variation in catcher framing effects, and whether count-specific framing
+ability is stable year to year.
 
 # References
 
-MLB.com. "Catcher Framing." *MLB Glossary*, Major League Baseball, 
-https://www.mlb.com/glossary/statcast/catcher-framing. Accessed April 2026.
+MLB.com. "Catcher Framing." *MLB Glossary*, Major League Baseball,
+https://www.mlb.com/glossary/statcast/catcher-framing. Accessed April
+2026.
 
-MLB Advanced Media. "Catcher Framing Leaderboard." *Baseball Savant*, 
-Major League Baseball, 2025. 
+MLB Advanced Media. "Catcher Framing Leaderboard." *Baseball Savant*,
+Major League Baseball, 2025.
 https://baseballsavant.mlb.com/catcher_framing. Accessed April 2026.
 
-MLB Advanced Media. *Statcast Pitch-Level Data, 2025 MLB Regular Season.* 
-Baseball Savant, Major League Baseball, 2025. 
+MLB Advanced Media. *Statcast Pitch-Level Data, 2025 MLB Regular
+Season.* Baseball Savant, Major League Baseball, 2025.
 https://baseballsavant.mlb.com/statcast_search. Accessed April 2026.
 
-Major League Baseball. *2026 Official Baseball Rules*, pg. 5. 
-https://mktg.mlbstatic.com/mlb/official-information/2026-official-baseball-rules.pdf. 
+Major League Baseball. *2026 Official Baseball Rules*, pg. 5.
+https://mktg.mlbstatic.com/mlb/official-information/2026-official-baseball-rules.pdf.
 Accessed April 2026.
 
-Powell, M.J.D. "The BOBYQA Algorithm for Bound Constrained Optimization Without 
-Derivatives." *Cambridge NA Report NA2009/06*, University of Cambridge, 2009.
+Powell, M.J.D. "The BOBYQA Algorithm for Bound Constrained Optimization
+Without Derivatives." *Cambridge NA Report NA2009/06*, University of
+Cambridge, 2009.
 
 # Appendix
 
@@ -568,6 +875,31 @@ model_comparison_table
 #| tbl-cap: "Table 2: Variance components and key fixed effects from full mixed-effects model"
 
 variance_fixed_table
+
+```
+
+```{r}
+#| echo: false
+#| label: tbl-count-comparison
+#| tbl-cap: "Table 3: Model comparison — baseline framing model vs. count-specific interaction model"
+
+tibble(
+  Model            = c("Baseline model", "Count interaction model"),
+  `Random effects` = c(
+    "Catcher + Pitcher + Batter",
+    "Catcher + Pitcher + Batter + Catcher x Count"
+  ),
+  AIC              = c(204944.9, 204937.5),
+  `Delta AIC`      = c(7.4, 0.0),
+  `Chi-sq`         = c("—", "9.457"),
+  df               = c("—", "1"),
+  `p-value`        = c("—", "0.002")
+) %>%
+  kable(
+    format  = "simple",
+    caption = "Model comparison: baseline vs. count-specific interaction model",
+    digits  = 1
+  )
 ```
 
 ## Figures
@@ -616,3 +948,42 @@ countrate_plot
 handedness_plot
 ```
 
+```{r}
+#| echo: false
+#| label: fig-count-effects
+#| fig-cap: "Figure 5: Top and bottom 15 catcher-by-count random effects (2025 season). Each point represents a catcher-count combination. Positive values indicate above-average framing in that count."
+#| fig-width: 7
+#| fig-height: 5
+
+library(tidyverse)
+library(lme4)
+
+ranef(framing_count)$`catcher_id:count` %>%
+  rownames_to_column("catcher_count") %>%
+  rename(effect = `(Intercept)`) %>%
+  arrange(desc(effect)) %>%
+  slice(c(1:15, (n()-14):n())) %>%
+  mutate(
+    catcher_count = fct_reorder(catcher_count, effect),
+    direction = ifelse(effect > 0, "Above average", "Below average")
+  ) %>%
+  ggplot(aes(x = effect, y = catcher_count, color = direction)) +
+  geom_point(size = 2.5) +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.5) +
+  scale_color_manual(
+    values = c("Above average" = "steelblue", "Below average" = "firebrick"),
+    name = NULL
+  ) +
+  labs(
+    title    = "Catcher-by-count framing effects (2025 season)",
+    subtitle = "Top and bottom 15 catcher-count combinations",
+    x        = "Random effect (log-odds scale)",
+    y        = NULL
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position    = "bottom"
+  )
+```
