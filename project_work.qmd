@@ -6,6 +6,8 @@ format: pdf
 ---
 
 ```{r}
+#library() + load cached RDS (commented out)
+
 library(httr)
 library(tidyverse)
 
@@ -15,6 +17,8 @@ library(tidyverse)
 ```
 
 ```{r}
+#build_savant_url + windows + pull_savant_chunk functions
+
 # Pull data from Baseball Savant (skip if loading from RDS above) 
 build_savant_url <- function(start, end) {
   paste0(
@@ -70,11 +74,15 @@ pull_savant_chunk <- function(start, end, retries = 3) {
 }
 ```
 ```{r}
+#test pull
+
 test <- pull_savant_chunk("2025-03-27", "2025-03-29")
 nrow(test)  # should be well under 25,000
 ```
 
 ```{r}
+#full season pull
+
 sc_2025_raw <- pmap_dfr(windows, function(start, end) {
   pull_savant_chunk(as.character(start), as.character(end))
 }) %>%
@@ -82,6 +90,8 @@ sc_2025_raw <- pmap_dfr(windows, function(start, end) {
 ```
 
 ```{r}
+#date fix + sanity check + saveRDS
+
 # Fix date column, verify, and save
 sc_2025_raw <- sc_2025_raw %>%
   mutate(game_date = as.Date(game_date, origin = "1970-01-01"))
@@ -97,6 +107,8 @@ saveRDS(sc_2025_raw, "statcast_2025_raw.rds")
 
 
 ```{r}
+#shadow_threshold definition
+
 #https://www.mlb.com/glossary/statcast/catcher-framing
 
 #Catcher Framing Runs converts a catcher’s called strikes to runs saved on a .125 runs per strike basis.
@@ -117,6 +129,8 @@ shadow_threshold <- ((9.000 / pi) + (9.250 / pi)) / 2 / 12
 ```
 
 ```{r}
+#shadow_2025 filter
+
 shadow_2025 <- sc_2025_raw %>%
   filter(
     description %in% c("called_strike", "ball"),
@@ -152,16 +166,16 @@ shadow_2025 <- sc_2025_raw %>%
 ```
 
 ```{r}
+#shadow zone sanity checks
 
-```
-
-```{r}
 cat("Shadow zone pitches:", nrow(shadow_2025), "\n")
 cat("Unique catchers:", n_distinct(shadow_2025$catcher_id), "\n")
 cat("Strike rate in shadow zone:", round(mean(shadow_2025$is_strike), 3), "\n")
 ```
 
 ```{r}
+#pitch distribution per catcher
+
 shadow_2025 %>%
   count(catcher_id, name = "n_pitches") %>%
   summarise(
@@ -180,6 +194,8 @@ shadow_2025 %>%
 ```
 
 ```{r}
+#eligible_catchers + shadow_model
+
 eligible_catchers <- shadow_2025 %>%
   count(catcher_id) %>%
   filter(n >= 300) %>%
@@ -207,8 +223,193 @@ framing_model <- glmer(
 
 summary(framing_model)
 ```
+```{r}
+#framing_model_reduced, AIC + LRT
+
+# ── Fit reduced model (catcher random effect only) ─────────────────────────
+framing_model_reduced <- glmer(
+  is_strike ~ plate_x + pz_norm + count + stand + p_throws +
+              (1 | catcher_id),
+  data    = shadow_model,
+  family  = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa",
+                         optCtrl   = list(maxfun = 2e5))
+)
+
+# ── Compare via AIC ────────────────────────────────────────────────────────
+AIC(framing_model, framing_model_reduced)
+
+# ── Likelihood ratio test ──────────────────────────────────────────────────
+anova(framing_model_reduced, framing_model, test = "Chisq")
+```
 
 ```{r}
+#heatmap
+
+library(ggplot2)
+
+# Create a 2D grid of called strike rate across plate location
+shadow_2025 %>%
+  mutate(
+    px_bin = round(plate_x / 0.1) * 0.1,
+    pz_bin = round(plate_z / 0.1) * 0.1
+  ) %>%
+  # ADD THIS FILTER to remove bins outside the shadow zone region
+  filter(
+    abs(px_bin) <= (0.83 + shadow_threshold + 0.05),
+    pz_bin >= (1.5 - shadow_threshold - 0.05),
+    pz_bin <= (3.5 + shadow_threshold + 0.05)
+  ) %>%
+  group_by(px_bin, pz_bin) %>%
+  summarise(
+    strike_rate = mean(is_strike),
+    n_pitches   = n(),
+    .groups = "drop"
+  ) %>%
+  filter(n_pitches >= 50) %>%
+  ggplot(aes(x = px_bin, y = pz_bin, fill = strike_rate)) +
+  geom_tile() +
+  
+  # Strike zone box (average dimensions)
+  annotate("rect",
+           xmin = -0.83, xmax = 0.83,
+           ymin = 1.5,   ymax = 3.5,
+           fill = NA, color = "black", linewidth = 0.8) +
+  
+  # Shadow zone boundary
+  annotate("rect",
+         xmin = -(0.83 + shadow_threshold), xmax = (0.83 + shadow_threshold),
+         ymin = 1.5  - shadow_threshold,    ymax = 3.5  + shadow_threshold,
+         fill = NA, color = "white",
+         linewidth = 0.6, linetype = "dashed") +
+  
+  scale_fill_gradient2(
+    low      = "dodgerblue",
+    mid      = "white",
+    high     = "firebrick",
+    midpoint = 0.5,
+    name     = "Called strike rate"
+  ) +
+  
+  labs(
+    title    = "Called strike rate by pitch location (2025 shadow zone)",
+    subtitle = "Shadow zone only — interior of strike zone excluded by design; dashed box = shadow zone boundary",
+    x        = "Horizontal position (ft, catcher's perspective)",
+    y        = "Vertical position (ft)"
+  ) +
+  
+  coord_fixed(xlim = c(-1.5, 1.5), ylim = c(0.5, 4.5)) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+#pitch distribution histogram
+
+shadow_2025 %>%
+  count(catcher_id, name = "n_pitches") %>%
+  ggplot(aes(x = n_pitches)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+  
+  # Mark the 300 pitch cutoff
+  geom_vline(xintercept = 300, color = "firebrick",
+             linetype = "dashed", linewidth = 0.8) +
+  annotate("text", x = 320, y = Inf,
+           label = "300 pitch\nminimum",
+           hjust = 0, vjust = 1.5,
+           color = "firebrick", size = 3.5) +
+  
+  labs(
+    title    = "Shadow zone pitches per catcher (2025 season)",
+    subtitle = "111 total catchers; 85 meet the 300-pitch minimum",
+    x        = "Number of shadow zone pitches",
+    y        = "Number of catchers"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+#strike rate by count
+
+shadow_2025 %>%
+  group_by(count) %>%
+  summarise(
+    strike_rate = mean(is_strike),
+    n_pitches   = n(),
+    .groups     = "drop"
+  ) %>%
+  # Order counts logically
+  mutate(count = fct_reorder(count, strike_rate)) %>%
+  ggplot(aes(x = strike_rate, y = count, fill = strike_rate)) +
+  geom_col() +
+  geom_text(aes(label = scales::percent(strike_rate, accuracy = 0.1)),
+            hjust = -0.1, size = 3) +
+  scale_fill_gradient2(
+    low      = "dodgerblue",
+    mid      = "white",
+    high     = "firebrick",
+    midpoint = mean(shadow_2025$is_strike),
+    guide    = "none"
+  ) +
+  scale_x_continuous(
+    labels = scales::percent,
+    expand = expansion(mult = c(0, 0.12))
+  ) +
+  labs(
+    title    = "Called strike rate by count in shadow zone (2025 season)",
+    subtitle = "Pitcher-friendly counts show higher strike rates on borderline pitches",
+    x        = "Called strike rate",
+    y        = "Count"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+#strike rate by handedness
+
+shadow_2025 %>%
+  group_by(stand, count) %>%
+  summarise(
+    strike_rate = mean(is_strike),
+    n_pitches   = n(),
+    .groups     = "drop"
+  ) %>%
+  mutate(
+    count = fct_reorder(count, strike_rate),
+    stand = recode(stand, "L" = "Left-handed batter", "R" = "Right-handed batter")
+  ) %>%
+  ggplot(aes(x = strike_rate, y = count, color = stand)) +
+  geom_point(aes(size = n_pitches), alpha = 0.7) +
+  geom_line(aes(group = count), color = "gray70", linewidth = 0.4) +
+  scale_color_manual(
+    values = c("Left-handed batter"  = "steelblue",
+               "Right-handed batter" = "firebrick"),
+    name   = NULL
+  ) +
+  scale_size_continuous(
+    name   = "Pitches",
+    range  = c(2, 6),
+    labels = scales::comma
+  ) +
+  scale_x_continuous(labels = scales::percent) +
+  labs(
+    title    = "Called strike rate by count and batter handedness (2025 shadow zone)",
+    subtitle = "Lines connect the same count across handedness — gap indicates handedness effect",
+    x        = "Called strike rate",
+    y        = "Count"
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position  = "bottom"
+  )
+```
+
+```{r}
+#Bootstrap
+
 library(broom.mixed)
 library(lme4)
 
@@ -254,83 +455,16 @@ saveRDS(bootstrap_framing, "bootstrap_framing_100.rds")
 ```
 
 ```{r}
-library(ggplot2)
-
-# Create a 2D grid of called strike rate across plate location
-shadow_2025 %>%
-  mutate(
-    px_bin = round(plate_x / 0.1) * 0.1,
-    pz_bin = round(plate_z / 0.1) * 0.1
-  ) %>%
-  group_by(px_bin, pz_bin) %>%
-  summarise(
-    strike_rate = mean(is_strike),
-    n_pitches   = n(),
-    .groups = "drop"
-  ) %>%
-  filter(n_pitches >= 50) %>%  # remove sparse bins
-  ggplot(aes(x = px_bin, y = pz_bin, fill = strike_rate)) +
-  geom_tile() +
-  
-  # Strike zone box (average dimensions)
-  annotate("rect",
-           xmin = -0.83, xmax = 0.83,
-           ymin = 1.5,   ymax = 3.5,
-           fill = NA, color = "black", linewidth = 0.8) +
-  
-  # Shadow zone boundary
-  annotate("rect",
-         xmin = -(0.83 + shadow_threshold), xmax = (0.83 + shadow_threshold),
-         ymin = 1.5  - shadow_threshold,    ymax = 3.5  + shadow_threshold,
-         fill = NA, color = "white",
-         linewidth = 0.6, linetype = "dashed") +
-  
-  scale_fill_gradient2(
-    low      = "dodgerblue",
-    mid      = "white",
-    high     = "firebrick",
-    midpoint = 0.5,
-    name     = "Called strike rate"
-  ) +
-  
-  labs(
-    title    = "Called strike rate by pitch location (2025 shadow zone)",
-    subtitle = "Solid box = strike zone, dashed box = shadow zone boundary",
-    x        = "Horizontal position (ft, catcher's perspective)",
-    y        = "Vertical position (ft)"
-  ) +
-  
-  coord_fixed() +
-  theme_bw() +
-  theme(panel.grid = element_blank())
+# ── Constants ──────────────────────────────────────────────────────────────
+# Source: https://www.mlb.com/glossary/statcast/catcher-framing
+# "Catcher Framing Runs converts a catcher's called strikes to runs
+#  saved on a .125 runs per strike basis"
+runs_per_strike <- 0.125
 ```
 
 ```{r}
-shadow_2025 %>%
-  count(catcher_id, name = "n_pitches") %>%
-  ggplot(aes(x = n_pitches)) +
-  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
-  
-  # Mark the 300 pitch cutoff
-  geom_vline(xintercept = 300, color = "firebrick",
-             linetype = "dashed", linewidth = 0.8) +
-  annotate("text", x = 320, y = Inf,
-           label = "300 pitch\nminimum",
-           hjust = 0, vjust = 1.5,
-           color = "firebrick", size = 3.5) +
-  
-  labs(
-    title    = "Shadow zone pitches per catcher (2025 season)",
-    subtitle = "111 total catchers; 89 meet the 300-pitch minimum",
-    x        = "Number of shadow zone pitches",
-    y        = "Number of catchers"
-  ) +
-  theme_bw() +
-  theme(panel.grid.minor = element_blank())
-```
+#caterpillar plot and catcher summary
 
-```{r}
-library(ggplot2)
 library(dplyr)
 
 # Build catcher summary from bootstrap output
@@ -379,10 +513,7 @@ catcher_summary %>%
 ```
 
 ```{r}
-# Source: https://www.mlb.com/glossary/statcast/catcher-framing
-# "Catcher Framing Runs converts a catcher's called strikes to runs
-#  saved on a .125 runs per strike basis"
-runs_per_strike <- 0.125
+#runs saved bar chart
 
 runs_saved <- catcher_summary %>%
   mutate(
@@ -402,21 +533,22 @@ runs_saved <- catcher_summary %>%
 
 # ── Top and bottom 10 catchers ─────────────────────────────────────────────
 top_bottom <- runs_saved %>%
+  arrange(desc(runs_saved_total)) %>%
   slice(c(1:10, (n()-9):n())) %>%
   mutate(
-    player_name = fct_reorder(player_name, runs_saved),
-    direction   = ifelse(runs_saved > 0, "Above average", "Below average")
+    player_name = fct_reorder(player_name, runs_saved_total),
+    direction   = ifelse(runs_saved_total > 0, "Above average", "Below average")
   )
 
 # ── Plot ───────────────────────────────────────────────────────────────────
 top_bottom %>%
-  ggplot(aes(x = runs_saved, y = player_name, fill = direction)) +
+  ggplot(aes(x = runs_saved_total, y = player_name, fill = direction)) +
   
   # Bars
   geom_col(width = 0.7, alpha = 0.85) +
   
   # Confidence intervals
-  geom_errorbarh(aes(xmin = runs_lower, xmax = runs_upper),
+  geom_errorbarh(aes(xmin = runs_lower_total, xmax = runs_upper_total),
                  height = 0.25, linewidth = 0.5, color = "gray30") +
   
   # Zero reference line
@@ -444,6 +576,8 @@ top_bottom %>%
 ```
 
 ```{r}
+#ridge plot
+
 library(ggridges)
 
 # install if needed
@@ -511,6 +645,8 @@ ridge_data %>%
 ```
 
 ```{r}
+#full runs saved table
+
 # ── Step 1: get pitch counts per catcher from model dataset ────────────────
 catcher_pitch_counts <- shadow_model %>%
   count(catcher_id, name = "n_pitches") %>%
@@ -567,94 +703,5 @@ runs_saved %>%
   print(n = 20)
 ```
 
-```{r}
-# ── Fit reduced model (catcher random effect only) ─────────────────────────
-framing_model_reduced <- glmer(
-  is_strike ~ plate_x + pz_norm + count + stand + p_throws +
-              (1 | catcher_id),
-  data    = shadow_model,
-  family  = binomial(link = "logit"),
-  control = glmerControl(optimizer = "bobyqa",
-                         optCtrl   = list(maxfun = 2e5))
-)
 
-# ── Compare via AIC ────────────────────────────────────────────────────────
-AIC(framing_model, framing_model_reduced)
 
-# ── Likelihood ratio test ──────────────────────────────────────────────────
-anova(framing_model_reduced, framing_model, test = "Chisq")
-```
-
-```{r}
-shadow_2025 %>%
-  group_by(count) %>%
-  summarise(
-    strike_rate = mean(is_strike),
-    n_pitches   = n(),
-    .groups     = "drop"
-  ) %>%
-  # Order counts logically
-  mutate(count = fct_reorder(count, strike_rate)) %>%
-  ggplot(aes(x = strike_rate, y = count, fill = strike_rate)) +
-  geom_col() +
-  geom_text(aes(label = scales::percent(strike_rate, accuracy = 0.1)),
-            hjust = -0.1, size = 3) +
-  scale_fill_gradient2(
-    low      = "dodgerblue",
-    mid      = "white",
-    high     = "firebrick",
-    midpoint = mean(shadow_2025$is_strike),
-    guide    = "none"
-  ) +
-  scale_x_continuous(
-    labels = scales::percent,
-    expand = expansion(mult = c(0, 0.12))
-  ) +
-  labs(
-    title    = "Called strike rate by count in shadow zone (2025 season)",
-    subtitle = "Pitcher-friendly counts show higher strike rates on borderline pitches",
-    x        = "Called strike rate",
-    y        = "Count"
-  ) +
-  theme_bw() +
-  theme(panel.grid.minor = element_blank())
-```
-
-```{r}
-shadow_2025 %>%
-  group_by(stand, count) %>%
-  summarise(
-    strike_rate = mean(is_strike),
-    n_pitches   = n(),
-    .groups     = "drop"
-  ) %>%
-  mutate(
-    count = fct_reorder(count, strike_rate),
-    stand = recode(stand, "L" = "Left-handed batter", "R" = "Right-handed batter")
-  ) %>%
-  ggplot(aes(x = strike_rate, y = count, color = stand)) +
-  geom_point(aes(size = n_pitches), alpha = 0.7) +
-  geom_line(aes(group = count), color = "gray70", linewidth = 0.4) +
-  scale_color_manual(
-    values = c("Left-handed batter"  = "steelblue",
-               "Right-handed batter" = "firebrick"),
-    name   = NULL
-  ) +
-  scale_size_continuous(
-    name   = "Pitches",
-    range  = c(2, 6),
-    labels = scales::comma
-  ) +
-  scale_x_continuous(labels = scales::percent) +
-  labs(
-    title    = "Called strike rate by count and batter handedness (2025 shadow zone)",
-    subtitle = "Lines connect the same count across handedness — gap indicates handedness effect",
-    x        = "Called strike rate",
-    y        = "Count"
-  ) +
-  theme_bw() +
-  theme(
-    panel.grid.minor = element_blank(),
-    legend.position  = "bottom"
-  )
-```
