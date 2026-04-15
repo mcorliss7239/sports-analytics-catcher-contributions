@@ -324,7 +324,7 @@ heatmap_plot <- shadow_2025 %>%
   
   labs(
     title    = "Called strike rate by pitch location (2025 shadow zone)",
-    subtitle = "Shadow zone only — interior of strike zone excluded by design; dashed box = shadow zone boundary",
+    subtitle = "Dashed box = shadow zone boundary",
     x        = "Horizontal position (ft, catcher's perspective)",
     y        = "Vertical position (ft)"
   ) +
@@ -395,7 +395,7 @@ countrate_plot <- shadow_2025 %>%
   ) +
   labs(
     title    = "Called strike rate by count in shadow zone (2025 season)",
-    subtitle = "Pitcher-friendly counts show higher strike rates on borderline pitches",
+    subtitle = "Batter-friendly counts show higher strike rates on borderline pitches",
     x        = "Called strike rate",
     y        = "Count"
   ) +
@@ -435,8 +435,8 @@ handedness_plot <- shadow_2025 %>%
   ) +
   scale_x_continuous(labels = scales::percent) +
   labs(
-    title    = "Called strike rate by count and batter handedness (2025 shadow zone)",
-    subtitle = "Lines connect the same count across handedness — gap indicates handedness effect",
+    title    = "Called strike rate by count and batter handedness",
+    subtitle = "2025 shadow zone, lines connect the same count across handedness",
     x        = "Called strike rate",
     y        = "Count"
   ) +
