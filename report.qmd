@@ -11,6 +11,23 @@ execute:
   message: false
 ---
 
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Load libraries
+library(httr)
+library(tidyverse)
+library(lme4)
+library(broom.mixed)
+library(ggridges)
+
+# Load cached data
+sc_2025_raw       <- readRDS("statcast_2025_raw.rds")
+#bootstrap_framing <- readRDS("bootstrap_framing_50.rds")
+```
+
 # Abstract
 
 # Introduction
@@ -208,4 +225,64 @@ Accessed April 2026.
 
 Powell, M.J.D. "The BOBYQA Algorithm for Bound Constrained Optimization Without 
 Derivatives." *Cambridge NA Report NA2009/06*, University of Cambridge, 2009.
+
+# Appendix
+
+## Tables
+
+```{r}
+#| echo: false
+model_comparison_table
+```
+
+```{r}
+#| echo: false
+variance_table
+```
+
+## Figures
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: "Called strike rate by pitch location (2025 shadow zone). Solid box = strike zone, dashed box = shadow zone boundary. Interior of strike zone excluded by design."
+#| label: fig-heatmap
+#| fig-width: 6
+#| fig-height: 5
+
+heatmap_plot
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: "Distribution of shadow zone pitches per catcher (2025 season). Dashed line indicates 300-pitch minimum threshold."
+#| label: fig-pitchdist
+#| fig-width: 6
+#| fig-height: 4
+
+pitchdist_plot
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: "Called strike rate by count in shadow zone (2025 season)."
+#| label: fig-countrate
+#| fig-width: 6
+#| fig-height: 5
+
+countrate_plot
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: "Called strike rate by count and batter handedness (2025 shadow zone)."
+#| label: fig-handedness
+#| fig-width: 6
+#| fig-height: 5
+
+handedness_plot
+```
 
