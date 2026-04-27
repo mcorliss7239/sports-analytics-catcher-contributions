@@ -650,4 +650,15 @@ leaderboard_table <- runs_saved %>%
 leaderboard_table
 ```
 
-
+```{r}
+# ── Save all report objects ────────────────────────────────────────────────
+saveRDS(heatmap_plot,           "heatmap_plot.rds")
+saveRDS(pitchdist_plot,         "pitchdist_plot.rds")
+saveRDS(countrate_plot,         "countrate_plot.rds")
+saveRDS(handedness_plot,        "handedness_plot.rds")
+saveRDS(caterpillar_plot,       "caterpillar_plot.rds")
+saveRDS(runssaved_plot,         "runssaved_plot.rds")
+saveRDS(model_comparison_table, "model_comparison_table.rds")
+saveRDS(variance_fixed_table,   "variance_fixed_table.rds")
+saveRDS(leaderboard_table,      "leaderboard_table.rds")
+```
