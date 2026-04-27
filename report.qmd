@@ -677,7 +677,7 @@ Cambridge, 2009.
 
 # Appendix
 
-Code repository: https://github.com/mcorliss7239/sports-analytics-catcher-contributions
+Code repository: [https://github.com/mcorliss7239/sports-analytics-catcher-contributions](https://github.com/mcorliss7239/sports-analytics-catcher-contributions)
 
 ## Tables
 
@@ -704,22 +704,24 @@ variance_fixed_table
 #| tbl-cap: "Model comparison — baseline framing model vs. count-specific interaction model"
 
 tibble(
-  Model      = c("Baseline", "Count interaction"),
-  `RE structure` = c(
+  Model         = c("Baseline", "Count interaction"),
+  `RE Structure` = c(
     "Catcher + Pitcher + Batter",
-    "+ Catcher × Count"
+    "+ Catcher x Count"
   ),
-  AIC        = c(204944.9, 204937.5),
-  `ΔAIC`     = c(7.4, 0.0),
-  `χ²`       = c("—", "9.457"),
-  df         = c("—", "1"),
-  `p-value`  = c("—", "0.002")
+  AIC           = c(204944.9, 204937.5),
+  `Delta AIC`   = c(7.4, 0.0),
+  `Chi-sq`      = c("—", "9.457"),
+  `df`          = c("—", "1"),
+  `p-value`     = c("—", "0.002")
 ) %>%
   kable(
-    format  = "simple",
-    digits  = 1
+    format = "simple",
+    digits = 1
   )
 ```
+
+\newpage
 
 ```{r}
 #| echo: false

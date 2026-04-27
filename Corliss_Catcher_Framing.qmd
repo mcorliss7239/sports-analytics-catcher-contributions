@@ -255,7 +255,6 @@ model_comparison_table <- tibble(
 ) %>%
   kable(
     format  = "simple",
-    caption = "Table 1: Model comparison: full vs. reduced mixed-effects logistic regression",
     digits  = 1
   )
 
@@ -290,7 +289,6 @@ variance_fixed_table <- tibble(
 ) %>%
   kable(
     format  = "simple",
-    caption = "Table 2: Variance components and key fixed effects from full mixed-effects model",
     digits  = 3
   )
 
@@ -443,14 +441,14 @@ handedness_plot <- shadow_2025 %>%
   ) %>%
   mutate(
     count = fct_reorder(count, strike_rate),
-    stand = recode(stand, "L" = "Left-handed batter", "R" = "Right-handed batter")
+    stand = recode(stand, "L" = "Left-handed", "R" = "Right-handed")
   ) %>%
   ggplot(aes(x = strike_rate, y = count, color = stand)) +
   geom_point(aes(size = n_pitches), alpha = 0.7) +
   geom_line(aes(group = count), color = "gray70", linewidth = 0.4) +
   scale_color_manual(
-    values = c("Left-handed batter"  = "steelblue",
-               "Right-handed batter" = "firebrick"),
+    values = c("Left-handed"  = "steelblue",
+               "Right-handed" = "firebrick"),
     name   = NULL
   ) +
   scale_size_continuous(
@@ -641,8 +639,7 @@ leaderboard_table <- runs_saved %>%
   slice(c(1:10, (n()-9):n())) %>%
   mutate(across(where(is.numeric), round, 2)) %>%
   kable(
-    format  = "simple",
-    caption = "Table 3: Top and bottom 10 catchers by framing runs saved (2025 season)"
+    format  = "simple"
   )
 ```
 
