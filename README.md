@@ -6,7 +6,7 @@ Built for 36-460/660 Sports Analytics at CMU.
 
 ## Setup
 1. Clone the repo
-2. Run the data pull section of `project_work.qmd` to generate local data files
+2. Run the data pull section of `Corliss_Catcher_Framing.qmd` to generate local data files
 3. Cached `.rds` files are gitignored and must be generated locally
 
 ## Data Sources
