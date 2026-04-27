@@ -5,7 +5,7 @@ date: 04/28/2026
 format: pdf
 ---
 
-Gen AI Usage Statement: This notebook was produced with the use of Claude for VS Code
+Gen AI Usage Statement: This notebook was produced with the use of Claude Code for VS Code
 
 # ── Load & Process the Data ────────────────────────────────────────────────────
 
@@ -225,9 +225,9 @@ block_heatmap_plot <- blocking_df %>%
   ggplot(aes(x = px_bin, y = pz_bin, fill = block_rate)) +
   geom_tile() +
   geom_hline(yintercept = avg_sz_bot,
-             linetype = "dashed", color = "white", linewidth = 0.7) +
+             linetype = "dashed", color = "black", linewidth = 0.7) +
   annotate("text", x = -2.1, y = avg_sz_bot + 0.06,
-           label = "avg. zone\nbottom", hjust = 0, color = "white", size = 2.8) +
+           label = "avg. zone\nbottom", hjust = 0, color = "black", size = 2.8) +
   scale_fill_gradient2(
     low      = "dodgerblue",
     mid      = "white",
@@ -519,11 +519,11 @@ cat("Selected model:", ifelse(identical(block_mod_final, block_mod_full),
 #   1. Get model intercept (log-odds baseline for reference category)
 #   2. For each catcher: P(block | catcher) = plogis(intercept + u_catcher)
 #   3. League baseline: P(block | average catcher) = plogis(intercept)
-#   4. Blocks above average per 100 = (P_catcher - P_baseline) * 100
+#   4. Blocks above average per 100 opp = (P_catcher - P_baseline) * 100
 #
-# This gives a metric analogous to framing runs saved:
-# how many extra blocks per 100 opportunities vs. a league-average catcher
-# facing the same pitch mix.
+# Scaling by 100 gives "blocks above average per 100 blocking opportunities."
+# Savant uses a different outcome (WP/PB prevention) and broader opportunity
+# definition, so direct scale comparison is not meaningful; rank correlation is.
 
 intercept <- fixef(block_mod_final)[["(Intercept)"]]
 p_baseline <- plogis(intercept)
@@ -532,23 +532,20 @@ catcher_effects <- ranef(block_mod_final)$catcher_id %>%
   rownames_to_column("catcher_id") %>%
   rename(random_effect = `(Intercept)`) %>%
   mutate(
-    p_catcher  = plogis(intercept + random_effect),
-    baa_per100 = (p_catcher - p_baseline) * 100
+    p_catcher   = plogis(intercept + random_effect),
+    baa_per_100 = (p_catcher - p_baseline) * 100
   ) %>%
-  arrange(desc(baa_per100))
+  arrange(desc(baa_per_100))
 
 cat("League baseline block rate (model intercept):",
     round(p_baseline, 3), "\n")
-cat("Range of catcher effects (BAA/100):",
-    round(min(catcher_effects$baa_per100), 2), "to",
-    round(max(catcher_effects$baa_per100), 2), "\n")
+cat("Range of catcher effects (BAA/100 opp):",
+    round(min(catcher_effects$baa_per_100), 3), "to",
+    round(max(catcher_effects$baa_per_100), 3), "\n")
 
 head(catcher_effects, 20)
 ```
 
-```{r}
-install.packages("baseballr")
-```
 
 ```{r}
 # catcher name lookup
@@ -575,18 +572,76 @@ head(catcher_effects_named)
 ```
 
 ```{r}
-# caterpillar plot: blocks above average per 100 opportunities
-# Shows all eligible catchers sorted by effect; the primary output figure
-# for the blocking results section.
+#| eval: false
+# bootstrap timing test — 422 sec/iteration (7 min) rules out sequential bootstrapping
+# (B=200 ≈ 23 hrs, B=100 ≈ 12 hrs). Using arm::se.ranef() instead.
 
-block_caterpillar_plot <- catcher_effects_named %>%
+boot_fun <- function(model) {
+  intercept  <- fixef(model)[["(Intercept)"]]
+  p_baseline <- plogis(intercept)
+  re         <- ranef(model)$catcher_id
+  u          <- re[["(Intercept)"]]
+  names(u)   <- rownames(re)
+  (plogis(intercept + u) - p_baseline) * 100
+}
+
+system.time({
+  bootMer(block_mod_full, FUN = boot_fun, nsim = 1,
+          type = "parametric", use.u = FALSE)
+})
+```
+
+```{r}
+# uncertainty quantification: conditional SEs from arm::se.ranef()
+#
+# bootMer() timed at 422 sec/iteration — infeasible for B>=100.
+# Instead: arm::se.ranef() extracts the conditional SE for each catcher BLUP
+# from the curvature of the Laplace-approximated posterior. This is the
+# standard mixed-models approach when bootstrap is computationally prohibitive.
+# CIs = BLUP ± 1.645 * SE (90%). Treats variance parameters as known; slight
+# undercoverage for sparse catchers but appropriate for this sample size range.
+
+library(arm)
+
+catcher_se <- se.ranef(block_mod_full)$catcher_id |>
+  as.data.frame() |>
+  rownames_to_column("catcher_id") |>
+  rename(se_u = `(Intercept)`)
+
+intercept <- fixef(block_mod_full)[["(Intercept)"]]
+p_baseline <- plogis(intercept)
+
+n_opps_df <- blocking_model_df |>
+  count(catcher_id, name = "n_opps") |>
+  mutate(catcher_id = as.character(catcher_id))
+
+catcher_effects_named <- catcher_effects_named |>
+  left_join(catcher_se, by = "catcher_id") |>
+  left_join(n_opps_df, by = "catcher_id") |>
   mutate(
-    label     = fct_reorder(label, baa_per100),
-    direction = if_else(baa_per100 >= 0, "Above average", "Below average")
-  ) %>%
-  ggplot(aes(x = baa_per100, y = label, color = direction)) +
+    ci_lo = (plogis(intercept + random_effect - 1.645 * se_u) - p_baseline) * 100,
+    ci_hi = (plogis(intercept + random_effect + 1.645 * se_u) - p_baseline) * 100
+  )
+
+cat("SE range:", round(range(catcher_effects_named$se_u), 4), "\n")
+cat("Median CI width (BAA/100 opp):", round(median(catcher_effects_named$ci_hi - catcher_effects_named$ci_lo), 3), "\n")
+```
+
+```{r}
+# caterpillar plot with 90% CI error bars
+# Primary results figure. CIs from arm::se.ranef() conditional SEs.
+# Catchers whose CI excludes 0 are reliably above/below average.
+
+block_caterpillar_ci_plot <- catcher_effects_named |>
+  mutate(
+    label     = fct_reorder(label, baa_per_100),
+    direction = if_else(baa_per_100 >= 0, "Above average", "Below average")
+  ) |>
+  ggplot(aes(x = baa_per_100, y = label, color = direction)) +
   geom_vline(xintercept = 0, linetype = "dashed",
              color = "gray40", linewidth = 0.5) +
+  geom_errorbarh(aes(xmin = ci_lo, xmax = ci_hi),
+                 height = 0.4, linewidth = 0.35, alpha = 0.6) +
   geom_point(size = 1.8) +
   scale_color_manual(
     values = c("Above average" = "steelblue", "Below average" = "firebrick"),
@@ -595,19 +650,184 @@ block_caterpillar_plot <- catcher_effects_named %>%
   labs(
     title    = "Catcher blocking: blocks above average per 100 opportunities (2025 season)",
     subtitle = paste0("Based on ", nrow(catcher_effects_named),
-                      " catchers with ≥ 100 below-zone pitches (0.3–1.5 ft below zone)"),
+                      " catchers with ≥ 100 below-zone pitches (0.3–1.5 ft below zone);\n",
+                      "error bars = 90% CI from conditional SEs (Laplace approximation)"),
     x        = "Blocks above average per 100 opportunities",
     y        = NULL
   ) +
   theme_bw() +
   theme(
-    axis.text.y      = element_text(size = 6),
+    axis.text.y        = element_text(size = 6),
     panel.grid.major.y = element_blank(),
     panel.grid.minor   = element_blank(),
     legend.position    = "bottom"
   )
 
-block_caterpillar_plot
+block_caterpillar_ci_plot
+```
+
+```{r}
+# ridge plot: conditional normal distributions N(u_j, SE_j^2) per catcher
+#
+# Pre-compute density over a grid for each catcher, then pass to geom_ridgeline.
+# geom_ridgeline with stat="function" doesn't support per-row aes() args.
+
+library(ggridges)
+
+x_grid <- seq(-6, 7, by = 0.02)
+
+ridge_data <- catcher_effects_named |>
+  mutate(
+    label  = fct_reorder(label, baa_per_100),
+    se_baa = (ci_hi - ci_lo) / (2 * 1.645)
+  ) |>
+  rowwise() |>
+  mutate(density_df = list(tibble(
+    x       = x_grid,
+    density = dnorm(x_grid, mean = baa_per_100, sd = se_baa)
+  ))) |>
+  ungroup() |>
+  dplyr::select(label, baa_per_100, density_df) |>
+  tidyr::unnest(density_df)
+
+block_ridge_plot <- ggplot(ridge_data,
+    aes(x = x, y = label, height = density,
+        fill = baa_per_100, group = label)) +
+  geom_vline(xintercept = 0, linetype = "dashed",
+             color = "gray40", linewidth = 0.5) +
+  geom_ridgeline(
+    scale     = 0.8,
+    alpha     = 0.7,
+    color     = "gray30",
+    linewidth = 0.2
+  ) +
+  scale_fill_gradient2(
+    low      = "firebrick",
+    mid      = "white",
+    high     = "steelblue",
+    midpoint = 0,
+    guide    = "none"
+  ) +
+  scale_x_continuous(limits = c(-6, 7)) +
+  labs(
+    title    = "Catcher blocking ability: model-implied distributions (2025 season)",
+    subtitle = "Each curve is N(û_j, SE_j²) from the fitted model; width reflects uncertainty",
+    x        = "Blocks above average per 100 opportunities",
+    y        = NULL
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.y      = element_text(size = 5),
+    panel.grid       = element_blank(),
+    panel.border     = element_blank(),
+    axis.line.x      = element_line(color = "gray40")
+  )
+
+block_ridge_plot
+```
+
+```{r}
+# paginated caterpillar CI plots — 20 catchers per page, sorted best to worst
+# Full plot above is for the report; these are for legible inspection.
+
+page_size <- 20
+catcher_sorted <- catcher_effects_named |>
+  arrange(desc(baa_per_100)) |>
+  mutate(rank = row_number())
+
+n_catchers <- nrow(catcher_sorted)
+n_pages    <- ceiling(n_catchers / page_size)
+
+make_caterpillar_page <- function(df, page, n_pages) {
+  df |>
+    mutate(
+      label     = fct_reorder(label, baa_per_100),
+      direction = if_else(baa_per_100 >= 0, "Above average", "Below average")
+    ) |>
+    ggplot(aes(x = baa_per_100, y = label, color = direction)) +
+    geom_vline(xintercept = 0, linetype = "dashed",
+               color = "gray40", linewidth = 0.5) +
+    geom_errorbarh(aes(xmin = ci_lo, xmax = ci_hi),
+                   height = 0.4, linewidth = 0.4, alpha = 0.6) +
+    geom_point(size = 2.5) +
+    scale_color_manual(
+      values = c("Above average" = "steelblue", "Below average" = "firebrick"),
+      name   = NULL
+    ) +
+    labs(
+      title    = paste0("Catcher blocking BAA/100 — page ", page, " of ", n_pages,
+                        " (ranks ", (page - 1) * page_size + 1, "–",
+                        min(page * page_size, n_catchers), ")"),
+      subtitle = "Blocks above average per 100 opportunities; error bars = 90% CI (Laplace approx.)",
+      x        = "Blocks above average per 100 opportunities",
+      y        = NULL
+    ) +
+    theme_bw() +
+    theme(
+      axis.text.y        = element_text(size = 9),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor   = element_blank(),
+      legend.position    = "bottom"
+    )
+}
+
+for (i in seq_len(n_pages)) {
+  idx <- ((i - 1) * page_size + 1):min(i * page_size, n_catchers)
+  print(make_caterpillar_page(catcher_sorted[idx, ], i, n_pages))
+}
+```
+
+```{r}
+# paginated ridge plots — 20 catchers per page, sorted best to worst
+
+make_ridge_page <- function(df, page, n_pages, x_grid) {
+  ridge_data <- df |>
+    mutate(
+      label  = fct_reorder(label, baa_per_100),
+      se_baa = (ci_hi - ci_lo) / (2 * 1.645)
+    ) |>
+    rowwise() |>
+    mutate(density_df = list(tibble(
+      x       = x_grid,
+      density = dnorm(x_grid, mean = baa_per_100, sd = se_baa)
+    ))) |>
+    ungroup() |>
+    dplyr::select(label, baa_per_100, density_df) |>
+    tidyr::unnest(density_df)
+
+  ggplot(ridge_data,
+      aes(x = x, y = label, height = density,
+          fill = baa_per_100, group = label)) +
+    geom_vline(xintercept = 0, linetype = "dashed",
+               color = "gray40", linewidth = 0.5) +
+    geom_ridgeline(scale = 1.5, alpha = 0.7,
+                   color = "gray30", linewidth = 0.2) +
+    scale_fill_gradient2(
+      low = "firebrick", mid = "white", high = "steelblue",
+      midpoint = 0, guide = "none"
+    ) +
+    scale_x_continuous(limits = c(-6, 7)) +
+    labs(
+      title    = paste0("Catcher blocking distributions — page ", page, " of ", n_pages,
+                        " (ranks ", (page - 1) * page_size + 1, "–",
+                        min(page * page_size, n_catchers), ")"),
+      subtitle = "Each curve is N(û_j, SE_j²) from the fitted model; width reflects uncertainty",
+      x        = "Blocks above average per 100 opportunities",
+      y        = NULL
+    ) +
+    theme_bw() +
+    theme(
+      axis.text.y  = element_text(size = 9),
+      panel.grid   = element_blank(),
+      panel.border = element_blank(),
+      axis.line.x  = element_line(color = "gray40")
+    )
+}
+
+for (i in seq_len(n_pages)) {
+  idx <- ((i - 1) * page_size + 1):min(i * page_size, n_catchers)
+  print(make_ridge_page(catcher_sorted[idx, ], i, n_pages, x_grid))
+}
 ```
 
 ```{r}
@@ -631,7 +851,7 @@ cat("Official passed balls:", sum(wp_pb$outcome == "passed_ball"), "\n")
 
 # Catchers with the most passed balls (catcher-charged failures)
 name_lookup <- catcher_effects_named |>
-  select(catcher_id, full_name) |>
+  dplyr::select(catcher_id, full_name) |>
   mutate(catcher_id = as.factor(catcher_id))
 
 wp_pb |>
@@ -639,6 +859,92 @@ wp_pb |>
   count(catcher_id, sort = TRUE) |>
   left_join(name_lookup, by = "catcher_id") |>
   mutate(name = if_else(is.na(full_name), as.character(catcher_id), full_name)) |>
-  select(name, n) |>
+  dplyr::select(name, n) |>
   print(n = 20)
+```
+
+# ── BASEBALL SAVANT RANKING COMPARISON ───────────────────────────────────────
+
+```{r}
+# Read Baseball Savant 2025 catcher blocking leaderboard CSV.
+# Download from: https://baseballsavant.mlb.com/catcher_blocking
+# Save as "savant_blocking_2025.csv" in the project folder.
+# Print column names first so we can identify the right fields.
+
+savant_raw <- read_csv("savant_blocking_2025.csv", show_col_types = FALSE)
+cat("Columns in Savant CSV:\n")
+print(names(savant_raw))
+cat("\nFirst few rows:\n")
+print(head(savant_raw))
+```
+
+```{r}
+# summary table: all eligible catchers, opportunities, and BAA/game estimate
+
+catcher_effects_named |>
+  arrange(desc(baa_per_100)) |>
+  dplyr::select(label, n_opps, baa_per_100) |>
+  mutate(baa_per_100 = round(baa_per_100, 3)) |>
+  knitr::kable(
+    col.names = c("Catcher", "Blocking Opportunities", "Blocks Above Avg / 100 Opp"),
+    caption   = "Catcher blocking rankings: 2025 season (minimum 100 below-zone pitches, 0.3–1.5 ft)"
+  )
+```
+
+```{r}
+# Join Savant rankings with our catcher effects by MLBAM player ID.
+# Savant column: blocks_above_average_per_game (per game caught, same 40-opp assumption).
+
+savant_blocking <- savant_raw |>
+  dplyr::select(player_id, savant_baa_per_100 = blocks_above_average_per_game)
+
+comparison_df <- catcher_effects_named |>
+  mutate(player_id = as.integer(catcher_id)) |>
+  inner_join(savant_blocking, by = "player_id") |>
+  mutate(
+    our_rank    = rank(-baa_per_100,         ties.method = "average"),
+    savant_rank = rank(-savant_baa_per_100,  ties.method = "average")
+  )
+
+cat("Catchers matched:", nrow(comparison_df), "\n")
+
+rho <- cor(comparison_df$our_rank, comparison_df$savant_rank, method = "spearman")
+cat("Spearman rank correlation (our ranking vs. Savant):", round(rho, 3), "\n")
+```
+
+```{r}
+# scatter plot: our BAA/game vs. Savant BAA/game
+# Positive correlation = our simpler model recovers similar ordering.
+
+library(ggrepel)
+
+ggplot(comparison_df, aes(x = savant_baa_per_100, y = baa_per_100, label = label)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
+  geom_point(color = "steelblue", size = 2.5, alpha = 0.8) +
+  geom_text_repel(size = 2.5, max.overlaps = 15) +
+  annotate("text", x = Inf, y = Inf,
+           label = paste0("Spearman ρ = ", round(rho, 3)),
+           hjust = 1.1, vjust = 1.5, size = 4, fontface = "bold") +
+  labs(
+    title    = "Our blocking model vs. Baseball Savant (2025 season)",
+    subtitle = "Each point is a catcher present in both systems",
+    x        = "Baseball Savant: blocks above average per game",
+    y        = "Our model: blocks above average per 100 opportunities"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+```
+
+# ── SAVE MODELS FOR REPORT.QMD ───────────────────────────────────────────────
+
+```{r}
+# Save fitted model and catcher effects so report.qmd can load them
+# without refitting (full model takes ~5-10 min to fit).
+# Run this chunk once after a successful top-to-bottom run.
+
+saveRDS(block_mod_full,        "block_mod_full.rds")
+saveRDS(catcher_effects_named, "catcher_effects_named.rds")
+
+cat("Saved block_mod_full.rds and catcher_effects_named.rds\n")
 ```
