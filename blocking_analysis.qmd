@@ -943,8 +943,15 @@ ggplot(comparison_df, aes(x = savant_baa_per_100, y = baa_per_100, label = label
 # without refitting (full model takes ~5-10 min to fit).
 # Run this chunk once after a successful top-to-bottom run.
 
-saveRDS(block_mod_full,        "block_mod_full.rds")
-saveRDS(catcher_effects_named, "catcher_effects_named.rds")
+saveRDS(block_mod_full,               "block_mod_full.rds")
+saveRDS(catcher_effects_named,        "catcher_effects_named.rds")
+saveRDS(block_heatmap_plot,           "block_heatmap_plot.rds")
+saveRDS(block_pitchdist_plot,         "block_pitchdist_plot.rds")
+saveRDS(block_by_pitchtype_plot,      "block_by_pitchtype_plot.rds")
+saveRDS(block_by_depth_plot,          "block_by_depth_plot.rds")
+saveRDS(block_caterpillar_ci_plot,    "block_caterpillar_ci_plot.rds")
+saveRDS(block_ridge_plot,             "block_ridge_plot.rds")
+saveRDS(block_model_comparison_table, "block_model_comparison_table.rds")
 
-cat("Saved block_mod_full.rds and catcher_effects_named.rds\n")
+cat("Saved all blocking RDS objects\n")
 ```
