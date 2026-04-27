@@ -8,6 +8,7 @@ format: pdf
 ```{r}
 #library() + load cached RDS (commented out)
 
+library(baseballr)
 library(httr)
 library(tidyverse)
 
@@ -472,83 +473,27 @@ handedness_plot <- shadow_2025 %>%
 ```
 
 ```{r}
-#Bootstrap
+# ── Extract random effects with conditional standard errors ────────────────
+# Following course demo approach 
+# 90% CI: estimate ± 1.645 * std.error
 
 library(broom.mixed)
-library(lme4)
 
-# Step 1: nest at the game-plate appearance level
-# (game_pk + batter_id approximates a PA)
-game_pa <- shadow_model |>
-  group_by(game_pk, batter_id) |>
-  nest() |>
-  ungroup()
-
-# Step 2: bootstrap
-N_BOOT <- 50  # start with 50, can increase later
-
-# Set seed for reproducibility
-set.seed(460)
-
-bootstrap_framing <-
-  map_dfr(1:N_BOOT, function(boot_i) {
-    
-    # Resample PAs within games (preserves game structure)
-    boot_data <- game_pa |>
-      group_by(game_pk) |>
-      sample_n(n(), replace = TRUE) |>
-      ungroup() |>
-      unnest(cols = data)
-    
-    # Refit model on resampled data
-    boot_glmm <- glmer(
-      is_strike ~ plate_x + pz_norm + count + stand + p_throws +
-                  (1 | catcher_id) + (1 | pitcher_id) + (1 | batter_id),
-      data    = boot_data,
-      family  = binomial(link = "logit"),
-      control = glmerControl(optimizer = "bobyqa",
-                             optCtrl   = list(maxfun = 2e5))
-    )
-    
-    # Extract random effects
-    tidy(boot_glmm, effects = "ran_vals") |>
-      mutate(boot = boot_i)
-  })
-
-saveRDS(bootstrap_framing, "bootstrap_framing_50.rds")
-```
-
-```{r}
-# ── Constants ──────────────────────────────────────────────────────────────
-# Source: https://www.mlb.com/glossary/statcast/catcher-framing
-# "Catcher Framing Runs converts a catcher's called strikes to runs
-#  saved on a .125 runs per strike basis"
-runs_per_strike <- 0.125
-```
-
-```{r}
-#caterpillar plot and catcher summary
-
-library(dplyr)
-
-# Build catcher summary from bootstrap output
-catcher_summary <- bootstrap_framing %>%
+catcher_ranef <- tidy(framing_model, effects = "ran_vals") %>%
   filter(group == "catcher_id") %>%
-  group_by(level) %>%
-  summarise(
-    estimate = median(estimate, na.rm = TRUE),
-    lower    = quantile(estimate, 0.05, na.rm = TRUE),
-    upper    = quantile(estimate, 0.95, na.rm = TRUE),
-    .groups  = "drop"
-  ) %>%
   arrange(estimate) %>%
   mutate(
+    lower = estimate - 1.645 * std.error,
+    upper = estimate + 1.645 * std.error,
     level = fct_inorder(level),
     sig   = lower > 0 | upper < 0
   )
+```
 
-# Caterpillar plot
-catcher_summary %>%
+
+```{r}
+# ── Caterpillar plot ───────────────────────────────────────────────────────
+caterpillar_plot <- catcher_ranef %>%
   ggplot(aes(x = estimate, y = level, color = sig)) +
   geom_errorbarh(aes(xmin = lower, xmax = upper),
                  height = 0, alpha = 0.5, linewidth = 0.4) +
@@ -563,7 +508,7 @@ catcher_summary %>%
   ) +
   labs(
     title    = "Catcher framing random effects (2025 season)",
-    subtitle = "90% bootstrap confidence intervals; red = CI does not cross zero",
+    subtitle = "90% confidence intervals based on conditional standard errors",
     x        = "Framing random effect (log-odds scale)",
     y        = NULL
   ) +
@@ -573,131 +518,97 @@ catcher_summary %>%
     axis.ticks.y       = element_blank(),
     panel.grid.major.y = element_blank(),
     panel.grid.minor   = element_blank(),
-    legend.position    = "bottom")
+    legend.position    = "bottom"
+  )
 ```
 
 ```{r}
-#runs saved bar chart
+caterpillar_plot
+```
 
-runs_saved <- catcher_summary %>%
+```{r}
+# ── Catcher names lookup ───────────────────────────────────────────────────
+library(baseballr)
+
+catcher_ids <- catcher_ranef %>%
+  pull(level) %>%
+  as.character() %>%
+  as.numeric()
+
+catcher_names <- map_dfr(catcher_ids, function(id) {
+  tryCatch({
+    info <- mlb_people(person_ids = id)
+    tibble(
+      level        = as.character(id),
+      catcher_name = info$full_name
+    )
+  }, error = function(e) {
+    tibble(level = as.character(id), catcher_name = as.character(id))
+  })
+})
+```
+
+```{r}
+
+```
+
+```{r}
+# ── Catcher pitch counts ───────────────────────────────────────────────────
+catcher_pitch_counts <- shadow_model %>%
+  count(catcher_id, name = "n_pitches") %>%
+  mutate(level = as.character(catcher_id))
+
+# ── Constants ──────────────────────────────────────────────────────────────
+runs_per_strike <- 0.125
+
+# ── Runs saved table ───────────────────────────────────────────────────────
+runs_saved <- catcher_ranef %>%
+  left_join(catcher_pitch_counts, by = "level") %>%
+  left_join(catcher_names, by = "level") %>%
   mutate(
-    runs_saved = estimate * runs_per_strike * 100,
-    runs_lower = lower    * runs_per_strike * 100,
-    runs_upper = upper    * runs_per_strike * 100
+    prob_estimate     = plogis(estimate) - 0.5,
+    prob_lower        = plogis(lower)    - 0.5,
+    prob_upper        = plogis(upper)    - 0.5,
+    runs_saved_total  = prob_estimate * n_pitches * runs_per_strike,
+    runs_lower_total  = prob_lower    * n_pitches * runs_per_strike,
+    runs_upper_total  = prob_upper    * n_pitches * runs_per_strike,
+    runs_saved_per100 = prob_estimate * 100 * runs_per_strike,
+    runs_lower_per100 = prob_lower    * 100 * runs_per_strike,
+    runs_upper_per100 = prob_upper    * 100 * runs_per_strike
   ) %>%
-  # Join in catcher names from the raw data
-  left_join(
-    sc_2025_raw %>%
-      select(fielder_2, player_name) %>%
-      distinct() %>%
-      mutate(level = as.character(fielder_2)),
-    by = "level"
-  ) %>%
-  mutate(player_name = ifelse(is.na(player_name), level, player_name))
+  arrange(desc(runs_saved_total))
+```
 
-# ── Top and bottom 10 catchers ─────────────────────────────────────────────
+```{r}
+catcher_pitch_counts
+
+runs_saved
+```
+
+```{r}
+# ── Runs saved bar chart ───────────────────────────────────────────────────
 top_bottom <- runs_saved %>%
-  arrange(desc(runs_saved_total)) %>%
   slice(c(1:10, (n()-9):n())) %>%
   mutate(
-    player_name = fct_reorder(player_name, runs_saved_total),
-    direction   = ifelse(runs_saved_total > 0, "Above average", "Below average")
+    catcher_name = fct_reorder(catcher_name, runs_saved_total),
+    direction    = ifelse(runs_saved_total > 0, "Above average", "Below average")
   )
 
-# ── Plot ───────────────────────────────────────────────────────────────────
-top_bottom %>%
-  ggplot(aes(x = runs_saved_total, y = player_name, fill = direction)) +
-  
-  # Bars
+runssaved_plot <- top_bottom %>%
+  ggplot(aes(x = runs_saved_total, y = catcher_name, fill = direction)) +
   geom_col(width = 0.7, alpha = 0.85) +
-  
-  # Confidence intervals
   geom_errorbarh(aes(xmin = runs_lower_total, xmax = runs_upper_total),
                  height = 0.25, linewidth = 0.5, color = "gray30") +
-  
-  # Zero reference line
   geom_vline(xintercept = 0, linewidth = 0.6, color = "black") +
-  
   scale_fill_manual(
     values = c("Above average" = "steelblue",
                "Below average" = "firebrick"),
     name   = NULL
   ) +
-  
   labs(
     title    = "Catcher framing value: top and bottom 10 (2025 season)",
-    subtitle = "Runs saved per 100 shadow zone pitches; error bars = 90% bootstrap CI",
-    x        = "Runs saved per 100 shadow zone pitches",
-    y        = NULL
-  ) +
-  
-  theme_bw() +
-  theme(
-    panel.grid.minor  = element_blank(),
-    panel.grid.major.y = element_blank(),
-    legend.position   = "bottom"
-  )
-```
-
-```{r}
-#ridge plot
-
-library(ggridges)
-
-# install if needed
-# install.packages("ggridges")
-
-# ── Top and bottom 10 catchers by median bootstrap estimate ────────────────
-top10_catchers <- catcher_summary %>%
-  slice_max(order_by = estimate, n = 10) %>%
-  mutate(level = fct_reorder(level, estimate))
-
-bot10_catchers <- catcher_summary %>%
-  slice_min(order_by = estimate, n = 10) %>%
-  mutate(level = fct_reorder(level, estimate))
-
-top_bot_levels <- c(levels(bot10_catchers$level),
-                    levels(top10_catchers$level))
-
-# ── Join in catcher names ──────────────────────────────────────────────────
-catcher_names <- sc_2025_raw %>%
-  select(fielder_2, player_name) %>%
-  distinct() %>%
-  mutate(level = as.character(fielder_2))
-
-# ── Build ridge plot dataset ───────────────────────────────────────────────
-ridge_data <- bootstrap_framing %>%
-  filter(group == "catcher_id",
-         level %in% top_bot_levels) %>%
-  left_join(catcher_names, by = "level") %>%
-  mutate(
-    player_name = ifelse(is.na(player_name), level, player_name),
-    player_name = fct_reorder(player_name, estimate, .fun = median),
-    direction   = ifelse(
-      level %in% levels(top10_catchers$level),
-      "Top 10", "Bottom 10"
-    )
-  )
-
-# ── Plot ───────────────────────────────────────────────────────────────────
-ridge_data %>%
-  ggplot(aes(x = estimate, y = player_name, fill = direction)) +
-  geom_density_ridges(
-    quantile_lines = TRUE,
-    quantiles      = 0.5,
-    rel_min_height = 0.01,
-    alpha          = 0.7
-  ) +
-  geom_vline(xintercept = 0, linetype = "dashed",
-             linewidth = 0.5, color = "black") +
-  scale_fill_manual(
-    values = c("Top 10" = "steelblue", "Bottom 10" = "firebrick"),
-    name   = NULL
-  ) +
-  labs(
-    title    = "Bootstrap distribution of framing effects: top and bottom 10 catchers (2025)",
-    subtitle = "Vertical line = median; distributions from 100 bootstrap iterations",
-    x        = "Framing random effect (log-odds scale)",
+    subtitle = "Total runs saved; error bars = 90% CI from conditional standard errors",
+    x        = "Runs saved",
     y        = NULL
   ) +
   theme_bw() +
@@ -709,63 +620,34 @@ ridge_data %>%
 ```
 
 ```{r}
-#full runs saved table
-
-# ── Step 1: get pitch counts per catcher from model dataset ────────────────
-catcher_pitch_counts <- shadow_model %>%
-  count(catcher_id, name = "n_pitches") %>%
-  mutate(level = as.character(catcher_id))
-
-# ── Step 2: build runs saved table ────────────────────────────────────────
-runs_saved <- bootstrap_framing %>%
-  filter(group == "catcher_id") %>%
-  group_by(level) %>%
-  summarise(
-    estimate = median(estimate, na.rm = TRUE),
-    lower    = quantile(estimate, 0.05, na.rm = TRUE),
-    upper    = quantile(estimate, 0.95, na.rm = TRUE),
-    .groups  = "drop"
-  ) %>%
-  # Join pitch counts
-  left_join(catcher_pitch_counts, by = "level") %>%
-  # Join catcher names
-  left_join(
-    sc_2025_raw %>%
-      select(fielder_2, player_name) %>%
-      distinct() %>%
-      mutate(level = as.character(fielder_2)),
-    by = "level"
-  ) %>%
-  mutate(
-    player_name = ifelse(is.na(player_name), level, player_name),
-    
-    # Convert log-odds RE to probability scale first
-    # plogis() converts log-odds to probability
-    prob_estimate = plogis(estimate) - 0.5,
-    prob_lower    = plogis(lower)    - 0.5,
-    prob_upper    = plogis(upper)    - 0.5,
-    
-    # Runs saved = extra strikes generated × 0.125 runs per strike
-    # Source: https://www.mlb.com/glossary/statcast/catcher-framing
-    # scaled to full season pitch count
-    runs_saved_total  = prob_estimate * n_pitches * runs_per_strike,
-    runs_lower_total  = prob_lower    * n_pitches * runs_per_strike,
-    runs_upper_total  = prob_upper    * n_pitches * runs_per_strike,
-
-    runs_saved_per100 = prob_estimate * 100 * runs_per_strike,
-    runs_lower_per100 = prob_lower    * 100 * runs_per_strike,
-    runs_upper_per100 = prob_upper    * 100 * runs_per_strike
-  ) %>%
-  arrange(desc(runs_saved_total))
-
-# ── Step 3: preview the leaderboard ───────────────────────────────────────
-runs_saved %>%
-  select(player_name, n_pitches,
-         runs_saved_total, runs_lower_total, runs_upper_total,
-         runs_saved_per100) %>%
-  mutate(across(where(is.numeric), round, 2)) %>%
-  print(n = 20)
+runssaved_plot
 ```
 
+
+```{r}
+# ── Leaderboard table ──────────────────────────────────────────────────────
+leaderboard_table <- runs_saved %>%
+  select(catcher_name, n_pitches,
+         runs_saved_total, runs_lower_total, runs_upper_total,
+         runs_saved_per100) %>%
+  rename(
+    `Catcher`        = catcher_name,
+    `Shadow pitches` = n_pitches,
+    `Runs saved`     = runs_saved_total,
+    `Lower 90% CI`   = runs_lower_total,
+    `Upper 90% CI`   = runs_upper_total,
+    `Runs saved/100` = runs_saved_per100
+  ) %>%
+  slice(c(1:10, (n()-9):n())) %>%
+  mutate(across(where(is.numeric), round, 2)) %>%
+  kable(
+    format  = "simple",
+    caption = "Table 3: Top and bottom 10 catchers by framing runs saved (2025 season)"
+  )
+```
+
+```{r}
+leaderboard_table
+```
 
 
