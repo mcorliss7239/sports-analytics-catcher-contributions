@@ -1,0 +1,678 @@
+---
+title: "36-460/660 Final Project - Catcher Framing Heterogeneity"
+author: "Joël Maïson"
+date: 04/27/2026
+format: pdf
+---
+
+Gen AI Usage Statement: This notebook was produced with the use of Claude (Anthropic) via the web chat interface at claude.ai. The purposes were for editing, commenting, paraphrasing, cleaning code and structure.
+
+# ── Setup and Data Load ────────────────────────────────────────────────────
+
+```{r load-libraries}
+#| warning: false
+#| message: false
+library(tidyverse)
+library(lme4)
+library(broom.mixed)
+library(knitr)
+library(ggplot2)
+library(forcats)
+library(baseballr)
+```
+
+```{r load-cached-data}
+# Raw Statcast data was pulled
+# Loading the same RDS keeps the data source consistent across all three
+# defensive components (framing, blocking, and this heterogeneity analysis).
+sc_2025_raw <- readRDS("statcast_2025_raw.rds")
+```
+
+# ── Build Shadow Zone Dataset (with pitch_type preserved) ─────────────────
+
+```{r shadow-threshold}
+# Shadow zone threshold from MLB rulebook baseball circumference
+# (9.000-9.250 inches), giving an average baseball width of ~0.242 ft.
+# Source: https://www.mlb.com/glossary/statcast/catcher-framing
+shadow_threshold <- ((9.000 / pi) + (9.250 / pi)) / 2 / 12
+```
+
+```{r build-shadow-data}
+shadow_2025 <- sc_2025_raw %>%
+  filter(
+    description %in% c("called_strike", "ball"),
+    !is.na(plate_x), !is.na(plate_z),
+    !is.na(sz_top),  !is.na(sz_bot),
+    !is.na(fielder_2),
+    !is.na(pitch_type)
+  ) %>%
+  mutate(
+    is_strike = as.integer(description == "called_strike"),
+    pz_norm   = (plate_z - sz_bot) / (sz_top - sz_bot),
+    dist_x    = pmin(abs(plate_x - 0.83), abs(plate_x + 0.83)),
+    dist_zt   = abs(plate_z - sz_top),
+    dist_zb   = abs(plate_z - sz_bot),
+    dist_edge = pmin(dist_x, dist_zt, dist_zb),
+    in_shadow = dist_edge <= shadow_threshold
+  ) %>%
+  filter(in_shadow) %>%
+  mutate(
+    catcher_id = as.factor(fielder_2),
+    pitcher_id = as.factor(pitcher),
+    batter_id  = as.factor(batter),
+    count      = as.factor(paste0(balls, "-", strikes)),
+    stand      = as.factor(stand),
+    p_throws   = as.factor(p_throws),
+    pitch_type = as.factor(pitch_type)
+  ) %>%
+  select(
+    game_date, game_pk,
+    pitcher_id, batter_id, catcher_id,
+    is_strike, plate_x, plate_z, pz_norm,
+    sz_top, sz_bot, dist_edge,
+    count, stand, p_throws, pitch_type
+  )
+```
+
+```{r build-shadow-model}
+# 300 pitch minimum mirrors Morgan's framing model
+eligible_catchers <- shadow_2025 %>%
+  count(catcher_id) %>%
+  filter(n >= 300) %>%
+  pull(catcher_id)
+
+shadow_model <- shadow_2025 %>%
+  filter(catcher_id %in% eligible_catchers) %>%
+  mutate(catcher_id = droplevels(catcher_id))
+
+# Group rare pitch types into broader buckets so per-cell sample sizes stay healthy
+shadow_model_pt <- shadow_model %>%
+  mutate(
+    pitch_type_grouped = case_when(
+      pitch_type %in% c("FF", "FA", "FT", "SI") ~ "Fastball",
+      pitch_type %in% c("SL", "ST", "SV")        ~ "Slider",
+      pitch_type %in% c("CU", "KC", "CS")        ~ "Curveball",
+      pitch_type == "CH"                          ~ "Changeup",
+      pitch_type == "FC"                          ~ "Cutter",
+      pitch_type == "FS"                          ~ "Splitter",
+      TRUE                                        ~ "Other"
+    ) %>% as.factor()
+  )
+
+cat("Pitches in modeling dataset:", nrow(shadow_model_pt), "\n")
+cat("Eligible catchers:", n_distinct(shadow_model_pt$catcher_id), "\n")
+shadow_model_pt %>% count(pitch_type_grouped, sort = TRUE)
+```
+
+# ── Exploratory Data Analysis ─────────────────────────────────────────────
+
+```{r}
+# ── EDA: Called strike rate by count and pitch type ────────────────────────
+# Shows the raw heterogeneity in framing outcomes across two contextual
+# dimensions before any modeling, motivating the count and pitch type
+# interaction terms in the heterogeneity models.
+
+eda_count_pt <- shadow_model_pt %>%
+  group_by(count, pitch_type_grouped) %>%
+  summarise(
+    strike_rate = mean(is_strike),
+    n_pitches   = n(),
+    .groups     = "drop"
+  ) %>%
+  filter(n_pitches >= 50,
+         pitch_type_grouped %in% c("Fastball", "Slider", "Curveball",
+                                   "Changeup", "Cutter")) %>%
+  mutate(
+    count = factor(count, levels = c("0-0", "0-1", "0-2",
+                                     "1-0", "1-1", "1-2",
+                                     "2-0", "2-1", "2-2",
+                                     "3-0", "3-1", "3-2"))
+  )
+
+eda_count_pt_plot <- eda_count_pt %>%
+  ggplot(aes(x = count, y = strike_rate, color = pitch_type_grouped,
+             group = pitch_type_grouped)) +
+  geom_line(linewidth = 0.7) +
+  geom_point(aes(size = n_pitches), alpha = 0.8) +
+  scale_color_manual(
+    values = c("Fastball"  = "firebrick",
+               "Slider"    = "steelblue",
+               "Curveball" = "darkgreen",
+               "Changeup"  = "purple",
+               "Cutter"    = "orange"),
+    name = "Pitch type"
+  ) +
+  scale_size_continuous(name = "Pitches", labels = scales::comma) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title    = "Called strike rate by count and pitch type (2025 shadow zone)",
+    subtitle = "Pitch type and count both shape outcomes on borderline pitches",
+    x        = "Count",
+    y        = "Called strike rate"
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x      = element_text(angle = 45, hjust = 1),
+    legend.position  = "bottom"
+  )
+
+eda_count_pt_plot
+saveRDS(eda_count_pt_plot, "framing_eda_count_pt_plot.rds")
+```
+```{r}
+# ── EDA: Called strike rate heatmap by count and pitch type ────────────────
+# Distinct visual idiom from Morgan's count-by-handedness plot.
+# Shows heterogeneity in framing outcomes across count and pitch type before
+# any modeling, motivating the interaction terms.
+
+eda_count_pt <- shadow_model_pt %>%
+  group_by(count, pitch_type_grouped) %>%
+  summarise(
+    strike_rate = mean(is_strike),
+    n_pitches   = n(),
+    .groups     = "drop"
+  ) %>%
+  filter(n_pitches >= 50,
+         pitch_type_grouped %in% c("Fastball", "Slider", "Curveball",
+                                   "Changeup", "Cutter", "Splitter")) %>%
+  mutate(
+    count = factor(count, levels = c("0-0", "0-1", "0-2",
+                                     "1-0", "1-1", "1-2",
+                                     "2-0", "2-1", "2-2",
+                                     "3-0", "3-1", "3-2")),
+    pitch_type_grouped = factor(pitch_type_grouped,
+                                levels = c("Fastball", "Cutter", "Slider",
+                                           "Curveball", "Changeup", "Splitter"))
+  )
+
+eda_count_pt_plot <- eda_count_pt %>%
+  ggplot(aes(x = count, y = pitch_type_grouped, fill = strike_rate)) +
+  geom_tile(color = "white", linewidth = 0.4) +
+  geom_text(aes(label = scales::percent(strike_rate, accuracy = 1)),
+            size = 3, color = "black") +
+  scale_fill_gradient2(
+    low      = "dodgerblue",
+    mid      = "white",
+    high     = "firebrick",
+    midpoint = 0.34,
+    labels   = scales::percent,
+    name     = "Called strike rate"
+  ) +
+  labs(
+    title    = "Called strike rate by count and pitch type (2025 shadow zone)",
+    subtitle = "Both contextual dimensions shape outcomes on borderline pitches",
+    x        = "Count",
+    y        = "Pitch type"
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid       = element_blank(),
+    axis.text.x      = element_text(angle = 0),
+    legend.position  = "bottom"
+  )
+
+eda_count_pt_plot
+saveRDS(eda_count_pt_plot, "framing_eda_count_pt_plot.rds")
+```
+
+
+# ── Fit Models (eval = FALSE; cached as RDS after first run) ───────────────
+
+```{r fit-models, eval = FALSE}
+# These four glmer fits each take 5 to 15 minutes. Fit once, save to RDS,
+# then load below. Two reduced models are required because the count
+# interaction model uses shadow_model (no pitch_type filter, 168,709 rows)
+# while the pitch type interaction model uses shadow_model_pt (with
+# pitch_type filter, 165,424 rows). LRTs require matched row counts.
+
+# Count specific framing model: catcher-by-count interaction.
+framing_count_model <- glmer(
+  is_strike ~ plate_x + pz_norm + count + stand + p_throws +
+              (1 | catcher_id) + (1 | pitcher_id) + (1 | batter_id) +
+              (1 | catcher_id:count),
+  data    = shadow_model,
+  family  = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+saveRDS(framing_count_model, "framing_count_model.rds")
+
+# Reduced model matched to the count model dataset (shadow_model)
+framing_count_reduced <- glmer(
+  is_strike ~ plate_x + pz_norm + count + stand + p_throws +
+              (1 | catcher_id) + (1 | pitcher_id) + (1 | batter_id),
+  data    = shadow_model,
+  family  = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+saveRDS(framing_count_reduced, "framing_count_reduced.rds")
+
+# Pitch type framing model: catcher-by-pitch-type interaction.
+framing_pt_model <- glmer(
+  is_strike ~ plate_x + pz_norm + count + stand + p_throws +
+              (1 | catcher_id) + (1 | pitcher_id) + (1 | batter_id) +
+              (1 | catcher_id:pitch_type_grouped),
+  data    = shadow_model_pt,
+  family  = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+saveRDS(framing_pt_model, "framing_pt_model.rds")
+
+# Reduced model matched to the pitch type model dataset (shadow_model_pt)
+framing_pt_reduced <- glmer(
+  is_strike ~ plate_x + pz_norm + count + stand + p_throws +
+              (1 | catcher_id) + (1 | pitcher_id) + (1 | batter_id),
+  data    = shadow_model_pt,
+  family  = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+saveRDS(framing_pt_reduced, "framing_pt_reduced.rds")
+```
+
+```{r load-models}
+framing_count_model   <- readRDS("framing_count_model.rds")
+framing_count_reduced <- readRDS("framing_count_reduced.rds")
+framing_pt_model      <- readRDS("framing_pt_model.rds")
+file.copy("framing_reduced.rds", "framing_pt_reduced.rds")
+framing_pt_reduced    <- readRDS("framing_pt_reduced.rds")
+```
+
+# ── Likelihood Ratio Tests ─────────────────────────────────────────────────
+
+```{r lrt-count}
+# Tests whether the count interaction term earns its keep
+lrt_count <- anova(framing_count_reduced, framing_count_model, test = "Chisq")
+lrt_count
+```
+
+```{r lrt-pt}
+# Tests whether the pitch type interaction term earns its keep
+lrt_pt <- anova(framing_pt_reduced, framing_pt_model, test = "Chisq")
+lrt_pt
+```
+
+```{r lrt-summary-table}
+# Compact summary for the report
+lrt_summary <- tibble(
+  Model            = c("Count interaction", "Pitch type interaction"),
+  `Chi-squared`    = c(round(lrt_count$Chisq[2],   2),
+                       round(lrt_pt$Chisq[2],      2)),
+  `Delta AIC`      = c(round(lrt_count$AIC[1] - lrt_count$AIC[2], 1),
+                       round(lrt_pt$AIC[1]   - lrt_pt$AIC[2],     1)),
+  `p-value`        = c(format.pval(lrt_count$`Pr(>Chisq)`[2], digits = 3),
+                       format.pval(lrt_pt$`Pr(>Chisq)`[2],    digits = 3))
+) %>%
+  kable(
+    format  = "simple",
+    caption = "Likelihood ratio tests for framing heterogeneity"
+  )
+
+lrt_summary
+```
+
+# ── Catcher Names Lookup (cached) ──────────────────────────────────────────
+
+```{r catcher-names}
+if (file.exists("catcher_names.rds")) {
+  catcher_names <- readRDS("catcher_names.rds")
+} else {
+  catcher_ids <- shadow_model_pt %>%
+    distinct(catcher_id) %>%
+    pull(catcher_id) %>%
+    as.character() %>%
+    as.numeric()
+
+  catcher_names <- map_dfr(catcher_ids, function(id) {
+    tryCatch({
+      info <- mlb_people(person_ids = id)
+      tibble(level = as.character(id), catcher_name = info$full_name)
+    }, error = function(e) {
+      tibble(level = as.character(id), catcher_name = as.character(id))
+    })
+  })
+  saveRDS(catcher_names, "catcher_names.rds")
+}
+```
+
+# ── Extract Random Effects with Conditional Standard Errors ────────────────
+
+```{r extract-count-ranef}
+# 90 percent CIs from conditional SEs follow Morgan's methodology
+count_all_ranef <- tidy(framing_count_model, effects = "ran_vals")
+
+catcher_main <- count_all_ranef %>%
+  filter(group == "catcher_id") %>%
+  arrange(estimate) %>%
+  mutate(
+    lower = estimate - 1.645 * std.error,
+    upper = estimate + 1.645 * std.error,
+    sig   = lower > 0 | upper < 0
+  )
+
+catcher_count <- count_all_ranef %>%
+  filter(group == "catcher_id:count") %>%
+  separate(level, into = c("catcher_id", "count"), sep = ":", remove = FALSE) %>%
+  mutate(
+    lower = estimate - 1.645 * std.error,
+    upper = estimate + 1.645 * std.error,
+    sig   = lower > 0 | upper < 0
+  )
+```
+
+```{r extract-pt-ranef}
+pt_ranef <- tidy(framing_pt_model, effects = "ran_vals") %>%
+  filter(group == "catcher_id:pitch_type_grouped") %>%
+  separate(level, into = c("catcher_id", "pitch_type_grouped"),
+           sep = ":", remove = FALSE) %>%
+  mutate(
+    lower = estimate - 1.645 * std.error,
+    upper = estimate + 1.645 * std.error,
+    sig   = lower > 0 | upper < 0
+  )
+```
+
+# ── Convert to Runs Saved Scale ────────────────────────────────────────────
+
+```{r runs-saved-scale}
+# Source for 0.125 runs per strike: https://www.mlb.com/glossary/statcast/catcher-framing
+runs_per_strike <- 0.125
+
+catcher_pitch_counts <- shadow_model_pt %>%
+  count(catcher_id, name = "n_pitches") %>%
+  mutate(catcher_id = as.character(catcher_id))
+
+pt_pitch_counts <- shadow_model_pt %>%
+  count(catcher_id, pitch_type_grouped, name = "n_pitches") %>%
+  mutate(catcher_id = as.character(catcher_id))
+
+catcher_count_runs <- catcher_count %>%
+  left_join(catcher_pitch_counts, by = "catcher_id") %>%
+  left_join(catcher_names, by = c("catcher_id" = "level")) %>%
+  mutate(
+    catcher_name  = ifelse(is.na(catcher_name), catcher_id, catcher_name),
+    prob_estimate = plogis(estimate) - 0.5,
+    prob_lower    = plogis(lower)    - 0.5,
+    prob_upper    = plogis(upper)    - 0.5,
+    runs_per100   = prob_estimate * 100 * runs_per_strike,
+    runs_lower    = prob_lower    * 100 * runs_per_strike,
+    runs_upper    = prob_upper    * 100 * runs_per_strike
+  )
+
+pt_runs <- pt_ranef %>%
+  left_join(pt_pitch_counts, by = c("catcher_id", "pitch_type_grouped")) %>%
+  left_join(catcher_names, by = c("catcher_id" = "level")) %>%
+  mutate(
+    catcher_name  = ifelse(is.na(catcher_name), catcher_id, catcher_name),
+    prob_estimate = plogis(estimate) - 0.5,
+    prob_lower    = plogis(lower)    - 0.5,
+    prob_upper    = plogis(upper)    - 0.5,
+    runs_per100   = prob_estimate * 100 * runs_per_strike,
+    runs_lower    = prob_lower    * 100 * runs_per_strike,
+    runs_upper    = prob_upper    * 100 * runs_per_strike
+  )
+```
+
+# ── Variance Components Table ──────────────────────────────────────────────
+
+```{r variance-table}
+# Pull variance components from both models for the report
+vc_count <- VarCorr(framing_count_model) %>% as.data.frame()
+vc_pt    <- VarCorr(framing_pt_model)    %>% as.data.frame()
+
+variance_components_table <- tibble(
+  Model              = c(rep("Count interaction", nrow(vc_count)),
+                         rep("Pitch type interaction", nrow(vc_pt))),
+  `Random effect`    = c(vc_count$grp, vc_pt$grp),
+  `Std. Dev.`        = round(c(vc_count$sdcor, vc_pt$sdcor), 3),
+  Variance           = round(c(vc_count$vcov,  vc_pt$vcov),  4)
+) %>%
+  kable(
+    format  = "simple",
+    caption = "Variance components from heterogeneity models"
+  )
+
+variance_components_table
+```
+
+# ── Plot 1: Count Specific Caterpillar (catcher baselines) ────────────────
+
+```{r plot-count-caterpillar}
+catcher_main_plot <- catcher_main %>%
+  mutate(level = fct_inorder(level)) %>%
+  ggplot(aes(x = estimate, y = level, color = sig)) +
+  geom_errorbarh(aes(xmin = lower, xmax = upper),
+                 height = 0, alpha = 0.5, linewidth = 0.4) +
+  geom_point(size = 1.5) +
+  geom_vline(xintercept = 0, linetype = "dashed",
+             color = "black", linewidth = 0.5) +
+  scale_color_manual(
+    values = c("FALSE" = "gray50", "TRUE" = "firebrick"),
+    labels = c("FALSE" = "CI includes zero",
+               "TRUE"  = "Significantly different from zero"),
+    name   = NULL
+  ) +
+  labs(
+    title    = "Catcher baseline framing effects (count specific model, 2025)",
+    subtitle = "90% CI from conditional standard errors",
+    x        = "Baseline framing random effect (log odds)",
+    y        = NULL
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.y        = element_blank(),
+    axis.ticks.y       = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor   = element_blank(),
+    legend.position    = "bottom"
+  )
+
+catcher_main_plot
+```
+
+# ── Plot 2: High Leverage Counts (0-2 and 3-0) ─────────────────────────────
+
+```{r plot-leverage}
+high_leverage <- catcher_count_runs %>%
+  filter(count %in% c("0-2", "3-0")) %>%
+  group_by(count) %>%
+  arrange(desc(runs_per100)) %>%
+  slice(c(1:10, (n() - 9):n())) %>%
+  ungroup() %>%
+  mutate(
+    catcher_name = fct_reorder(catcher_name, runs_per100),
+    direction    = ifelse(runs_per100 > 0, "Above average", "Below average")
+  )
+
+leverage_plot <- high_leverage %>%
+  ggplot(aes(x = runs_per100, y = catcher_name, fill = direction)) +
+  geom_col(width = 0.7, alpha = 0.85) +
+  geom_errorbarh(aes(xmin = runs_lower, xmax = runs_upper),
+                 height = 0.25, linewidth = 0.4, color = "gray30") +
+  geom_vline(xintercept = 0, linewidth = 0.5, color = "black") +
+  facet_wrap(~ count, scales = "free_y") +
+  scale_fill_manual(
+    values = c("Above average" = "steelblue",
+               "Below average" = "firebrick"),
+    name   = NULL
+  ) +
+  labs(
+    title    = "Catcher framing in high leverage counts (2025)",
+    subtitle = "Top and bottom 10 per count, runs saved per 100 shadow pitches",
+    x        = "Runs saved per 100 pitches",
+    y        = NULL
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position    = "bottom"
+  )
+
+leverage_plot
+```
+
+# ── Plot 3: Count Profiles (best and worst by baseline) ────────────────────
+
+```{r plot-count-profiles}
+profile_ids <- catcher_main %>%
+  arrange(estimate) %>%
+  slice(c(1:3, (n() - 2):n())) %>%
+  pull(level) %>%
+  as.character()
+
+profile_data <- catcher_count_runs %>%
+  filter(catcher_id %in% profile_ids) %>%
+  mutate(
+    count = factor(count, levels = c("0-0", "0-1", "0-2",
+                                     "1-0", "1-1", "1-2",
+                                     "2-0", "2-1", "2-2",
+                                     "3-0", "3-1", "3-2"))
+  )
+
+profile_plot <- profile_data %>%
+  ggplot(aes(x = count, y = runs_per100)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  geom_errorbar(aes(ymin = runs_lower, ymax = runs_upper),
+                width = 0.2, color = "gray40") +
+  geom_point(aes(color = runs_per100 > 0), size = 2) +
+  facet_wrap(~ catcher_name, ncol = 3) +
+  scale_color_manual(values = c("TRUE" = "steelblue", "FALSE" = "firebrick"),
+                     guide = "none") +
+  labs(
+    title    = "Catcher framing profiles by count (2025)",
+    subtitle = "Three best and three worst catchers by baseline framing",
+    x        = "Count",
+    y        = "Runs saved per 100 pitches"
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x      = element_text(angle = 45, hjust = 1)
+  )
+
+profile_plot
+```
+
+# ── Plot 4: Pitch Type Top and Bottom 5 ────────────────────────────────────
+
+```{r plot-pt-topbot}
+top_bot_by_pt <- pt_runs %>%
+  filter(pitch_type_grouped %in% c("Fastball", "Slider", "Curveball", "Changeup")) %>%
+  group_by(pitch_type_grouped) %>%
+  arrange(desc(runs_per100)) %>%
+  slice(c(1:5, (n() - 4):n())) %>%
+  ungroup() %>%
+  mutate(
+    catcher_name = tidytext::reorder_within(catcher_name, runs_per100,
+                                            pitch_type_grouped),
+    direction    = ifelse(runs_per100 > 0, "Above average", "Below average")
+  )
+
+pt_topbot_plot <- top_bot_by_pt %>%
+  ggplot(aes(x = runs_per100, y = catcher_name, fill = direction)) +
+  geom_col(width = 0.7, alpha = 0.85) +
+  geom_errorbarh(aes(xmin = runs_lower, xmax = runs_upper),
+                 height = 0.25, linewidth = 0.4, color = "gray30") +
+  geom_vline(xintercept = 0, linewidth = 0.5, color = "black") +
+  facet_wrap(~ pitch_type_grouped, scales = "free_y", ncol = 2) +
+  tidytext::scale_y_reordered() +
+  scale_fill_manual(
+    values = c("Above average" = "steelblue",
+               "Below average" = "firebrick"),
+    name   = NULL
+  ) +
+  labs(
+    title    = "Catcher framing by pitch type (2025)",
+    subtitle = "Top and bottom 5 per pitch type, runs saved per 100 shadow pitches",
+    x        = "Runs saved per 100 pitches",
+    y        = NULL
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position    = "bottom"
+  )
+
+pt_topbot_plot
+```
+
+# ── Plot 5: Pitch Type Specialist Profiles ─────────────────────────────────
+
+```{r plot-pt-profiles}
+profile_pt_ids <- pt_runs %>%
+  group_by(catcher_id) %>%
+  summarise(spread = max(runs_per100, na.rm = TRUE) -
+                     min(runs_per100, na.rm = TRUE)) %>%
+  arrange(desc(spread)) %>%
+  slice(1:6) %>%
+  pull(catcher_id)
+
+profile_pt_data <- pt_runs %>%
+  filter(catcher_id %in% profile_pt_ids) %>%
+  mutate(
+    pitch_type_grouped = factor(pitch_type_grouped,
+                                levels = c("Fastball", "Cutter", "Slider",
+                                           "Curveball", "Changeup",
+                                           "Splitter", "Other"))
+  )
+
+pt_profile_plot <- profile_pt_data %>%
+  ggplot(aes(x = pitch_type_grouped, y = runs_per100)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  geom_errorbar(aes(ymin = runs_lower, ymax = runs_upper),
+                width = 0.2, color = "gray40") +
+  geom_point(aes(color = runs_per100 > 0), size = 2) +
+  facet_wrap(~ catcher_name, ncol = 3) +
+  scale_color_manual(values = c("TRUE" = "steelblue", "FALSE" = "firebrick"),
+                     guide = "none") +
+  labs(
+    title    = "Catcher specialist profiles by pitch type (2025)",
+    subtitle = "Six catchers with the largest spread across pitch types",
+    x        = "Pitch type",
+    y        = "Runs saved per 100 pitches"
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x      = element_text(angle = 45, hjust = 1)
+  )
+
+pt_profile_plot
+```
+
+# ── Limitations: Why a Throwing Model Was Not Included ─────────────────────
+
+```{r steals-diagnostic}
+# The original project proposal included a throwing component (catcher arm
+# effectiveness on stolen base attempts). The pitch level Statcast feed used
+# for framing and blocking only tags terminal plate appearance events, so
+# stolen base events do not appear in this dataset. The diagnostic below
+# documents this limitation.
+
+steals_check <- sc_2025_raw %>%
+  filter(events %in% c("stolen_base_2b", "caught_stealing_2b",
+                       "stolen_base_3b", "caught_stealing_3b",
+                       "pickoff_caught_stealing_2b",
+                       "pickoff_caught_stealing_3b")) %>%
+  count(events)
+
+cat("Stolen base events in pitch level feed: ", nrow(steals_check), " rows\n")
+steals_check
+```
+
+# ── Save Outputs for report.qmd ────────────────────────────────────────────
+
+```{r save-outputs}
+saveRDS(catcher_main_plot,         "framing_main_plot.rds")
+saveRDS(leverage_plot,             "framing_leverage_plot.rds")
+saveRDS(profile_plot,              "framing_profile_plot.rds")
+saveRDS(pt_topbot_plot,            "framing_pt_topbot_plot.rds")
+saveRDS(pt_profile_plot,           "framing_pt_profile_plot.rds")
+saveRDS(catcher_count_runs,        "framing_count_runs.rds")
+saveRDS(pt_runs,                   "framing_pt_runs.rds")
+saveRDS(lrt_summary,               "lrt_summary.rds")
+saveRDS(variance_components_table, "variance_components_table.rds")
+
+cat("Saved all framing heterogeneity outputs.\n")
+```
