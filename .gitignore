@@ -2,6 +2,22 @@
 .Rhistory
 .RData
 .Ruserdata
-*.rds
 *.csv
 *.Rproj
+
+# Large data files - keep ignored
+statcast_2025_raw.rds
+bootstrap_framing_50.rds
+framing_model.rds
+
+# Plot objects - allow these
+!heatmap_plot.rds
+!pitchdist_plot.rds
+!countrate_plot.rds
+!handedness_plot.rds
+!caterpillar_plot.rds
+!runssaved_plot.rds
+!model_comparison_table.rds
+!variance_fixed_table.rds
+!leaderboard_table.rds
+!leaderboard_table.rds
