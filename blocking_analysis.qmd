@@ -771,9 +771,12 @@ make_caterpillar_page <- function(df, page, n_pages) {
     )
 }
 
+block_caterpillar_pages <- vector("list", n_pages)
 for (i in seq_len(n_pages)) {
   idx <- ((i - 1) * page_size + 1):min(i * page_size, n_catchers)
-  print(make_caterpillar_page(catcher_sorted[idx, ], i, n_pages))
+  p <- make_caterpillar_page(catcher_sorted[idx, ], i, n_pages)
+  block_caterpillar_pages[[i]] <- p
+  print(p)
 }
 ```
 
@@ -824,9 +827,12 @@ make_ridge_page <- function(df, page, n_pages, x_grid) {
     )
 }
 
+block_ridge_pages <- vector("list", n_pages)
 for (i in seq_len(n_pages)) {
   idx <- ((i - 1) * page_size + 1):min(i * page_size, n_catchers)
-  print(make_ridge_page(catcher_sorted[idx, ], i, n_pages, x_grid))
+  p <- make_ridge_page(catcher_sorted[idx, ], i, n_pages, x_grid)
+  block_ridge_pages[[i]] <- p
+  print(p)
 }
 ```
 
@@ -913,16 +919,33 @@ cat("Spearman rank correlation (our ranking vs. Savant):", round(rho, 3), "\n")
 ```
 
 ```{r}
-# scatter plot: our BAA/game vs. Savant BAA/game
-# Positive correlation = our simpler model recovers similar ordering.
+# opportunity comparison table: our n_opps vs. Savant pitch counts
+# Illustrates why scale comparison is invalid: our 0.3–1.5 ft filter
+# yields far fewer opportunities than Savant's broader opportunity definition.
 
-library(ggrepel)
+block_opportunity_comparison_table <- comparison_df |>
+  left_join(dplyr::select(savant_raw, player_id, savant_pitches = pitches),
+            by = "player_id") |>
+  arrange(desc(baa_per_100)) |>
+  dplyr::select(label, n_opps, savant_pitches) |>
+  knitr::kable(
+    col.names = c("Catcher", "Our Opportunities (0.3–1.5 ft)", "Savant Total Pitches"),
+    caption   = "Blocking opportunity counts by system (2025 season, matched catchers)"
+  )
 
-ggplot(comparison_df, aes(x = savant_baa_per_100, y = baa_per_100, label = label)) +
+block_opportunity_comparison_table
+```
+
+```{r}
+# scatter plot: our BAA/100 vs. Savant BAA/game
+# Uses geom_text (check_overlap) — no ggrepel dependency.
+
+block_savant_scatter_plot <- ggplot(comparison_df,
+    aes(x = savant_baa_per_100, y = baa_per_100, label = label)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray60") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
   geom_point(color = "steelblue", size = 2.5, alpha = 0.8) +
-  geom_text_repel(size = 2.5, max.overlaps = 15) +
+  geom_text(size = 2.2, vjust = -0.6, check_overlap = TRUE) +
   annotate("text", x = Inf, y = Inf,
            label = paste0("Spearman ρ = ", round(rho, 3)),
            hjust = 1.1, vjust = 1.5, size = 4, fontface = "bold") +
@@ -934,6 +957,8 @@ ggplot(comparison_df, aes(x = savant_baa_per_100, y = baa_per_100, label = label
   ) +
   theme_bw() +
   theme(panel.grid.minor = element_blank())
+
+block_savant_scatter_plot
 ```
 
 # ── SAVE MODELS FOR REPORT.QMD ───────────────────────────────────────────────
@@ -943,15 +968,19 @@ ggplot(comparison_df, aes(x = savant_baa_per_100, y = baa_per_100, label = label
 # without refitting (full model takes ~5-10 min to fit).
 # Run this chunk once after a successful top-to-bottom run.
 
-saveRDS(block_mod_full,               "block_mod_full.rds")
-saveRDS(catcher_effects_named,        "catcher_effects_named.rds")
-saveRDS(block_heatmap_plot,           "block_heatmap_plot.rds")
-saveRDS(block_pitchdist_plot,         "block_pitchdist_plot.rds")
-saveRDS(block_by_pitchtype_plot,      "block_by_pitchtype_plot.rds")
-saveRDS(block_by_depth_plot,          "block_by_depth_plot.rds")
-saveRDS(block_caterpillar_ci_plot,    "block_caterpillar_ci_plot.rds")
-saveRDS(block_ridge_plot,             "block_ridge_plot.rds")
-saveRDS(block_model_comparison_table, "block_model_comparison_table.rds")
+saveRDS(block_mod_full,                      "block_mod_full.rds")
+saveRDS(catcher_effects_named,               "catcher_effects_named.rds")
+saveRDS(block_heatmap_plot,                  "block_heatmap_plot.rds")
+saveRDS(block_pitchdist_plot,                "block_pitchdist_plot.rds")
+saveRDS(block_by_pitchtype_plot,             "block_by_pitchtype_plot.rds")
+saveRDS(block_by_depth_plot,                 "block_by_depth_plot.rds")
+saveRDS(block_caterpillar_ci_plot,           "block_caterpillar_ci_plot.rds")
+saveRDS(block_ridge_plot,                    "block_ridge_plot.rds")
+saveRDS(block_model_comparison_table,        "block_model_comparison_table.rds")
+saveRDS(block_savant_scatter_plot,           "block_savant_scatter_plot.rds")
+saveRDS(block_opportunity_comparison_table,  "block_opportunity_comparison_table.rds")
+saveRDS(block_caterpillar_pages,             "block_caterpillar_pages.rds")
+saveRDS(block_ridge_pages,                   "block_ridge_pages.rds")
 
 cat("Saved all blocking RDS objects\n")
 ```

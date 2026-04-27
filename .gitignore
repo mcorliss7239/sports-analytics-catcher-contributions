@@ -5,6 +5,9 @@
 *.csv
 *.Rproj
 
+# Local dev files - never push
+CLAUDE.md
+
 # Large data files - keep ignored
 statcast_2025_raw.rds
 bootstrap_framing_50.rds
