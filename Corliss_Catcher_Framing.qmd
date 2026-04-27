@@ -1,9 +1,11 @@
 ---
-title: "36-460/660 Homework 2"
-author: "INSERT NAME HERE"
-date: 02/11/2026
+title: "Catcher Framing"
+author: "Morgan Corliss"
+date: 04/28/2026
 format: pdf
 ---
+
+Gen AI Usage Statement: This notebook was produced with the aim of Claude Code for RStudio
 
 ```{r}
 #library() + load cached RDS (commented out)
