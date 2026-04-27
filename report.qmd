@@ -1,18 +1,19 @@
 ---
-title: "Draft: Measuring MLB Catcher Defensive Contributions"
+title: "Measuring MLB Catcher Defensive Contributions"
 author: "Arthur Spirou, Joel Maison, and Morgan Corliss"
-date: "15 April 2026"
+date: "28 April 2026"
 format: 
   pdf:
     toc: false
+    fontsize: 11pt
+    geometry: margin=1in
 execute:
   echo: false
   warning: false
   message: false
-editor: 
-  markdown: 
-    wrap: 72
 ---
+
+\newpage
 
 ```{r}
 #| echo: false
@@ -273,7 +274,7 @@ specified.
 
 ## Arthur Spirou: Catcher Blocking via Mixed-Effects Logistic Regression
 
-### Blocking Model Description\*\*
+### Blocking Model Description
 
 -   Goal: isolate catcher influence on likely blocking opportunities
     above and beyond pitch location, pitch type, and pitcher context
@@ -497,7 +498,7 @@ have intervals that overlap zero.
 
 @fig-runssaved and @tbl-leaderboard show the top and bottom 10 catchers
 by total runs saved. These results directly address the motivating
-question of how much catcher framing contributes to defensive value —
+question of how much catcher framing contributes to defensive value,
 the gap between the best and worst framers is approximately 35 runs over
 a full season, a difference large enough to meaningfully impact team
 performance. Patrick Bailey leads all catchers with 21.8 runs saved
@@ -508,7 +509,7 @@ Shea Langeliers (-13.0 runs, CI: -20.6 to -5.5) rank furthest below
 average. Austin Hedges saves the most runs per 100 shadow zone pitches
 (0.49) despite limited playing time, suggesting strong framing skill
 regardless of sample size. Notable catchers with confidence intervals
-crossing zero — including Austin Wells and Carlos Narváez — cannot be
+crossing zero including Austin Wells and Carlos Narváez cannot be
 confidently distinguished from average, highlighting the importance of
 reporting uncertainty alongside point estimates.
 
@@ -648,6 +649,8 @@ Future work could also examine which specific counts show the largest
 variation in catcher framing effects, and whether count-specific framing
 ability is stable year to year.
 
+\newpage
+
 # References
 
 MLB.com. "Catcher Framing." *MLB Glossary*, Major League Baseball,
@@ -670,14 +673,18 @@ Powell, M.J.D. "The BOBYQA Algorithm for Bound Constrained Optimization
 Without Derivatives." *Cambridge NA Report NA2009/06*, University of
 Cambridge, 2009.
 
+\newpage
+
 # Appendix
+
+Code repository: https://github.com/mcorliss7239/sports-analytics-catcher-contributions
 
 ## Tables
 
 ```{r}
 #| echo: false
 #| label: tbl-model-comparison
-#| tbl-cap: "Table 1: Model comparison — full vs. reduced mixed-effects logistic regression"
+#| tbl-cap: "Model comparison — full vs. reduced mixed-effects logistic regression"
 
 model_comparison_table
 ```
@@ -685,7 +692,7 @@ model_comparison_table
 ```{r}
 #| echo: false
 #| label: tbl-variance-fixed
-#| tbl-cap: "Table 2: Variance components and key fixed effects from full mixed-effects model"
+#| tbl-cap: "Variance components and key fixed effects from full mixed-effects model"
 
 variance_fixed_table
 
@@ -694,23 +701,22 @@ variance_fixed_table
 ```{r}
 #| echo: false
 #| label: tbl-count-comparison
-#| tbl-cap: "Table 3: Model comparison — baseline framing model vs. count-specific interaction model"
+#| tbl-cap: "Model comparison — baseline framing model vs. count-specific interaction model"
 
 tibble(
-  Model            = c("Baseline model", "Count interaction model"),
-  `Random effects` = c(
+  Model      = c("Baseline", "Count interaction"),
+  `RE structure` = c(
     "Catcher + Pitcher + Batter",
-    "Catcher + Pitcher + Batter + Catcher x Count"
+    "+ Catcher × Count"
   ),
-  AIC              = c(204944.9, 204937.5),
-  `Delta AIC`      = c(7.4, 0.0),
-  `Chi-sq`         = c("—", "9.457"),
-  df               = c("—", "1"),
-  `p-value`        = c("—", "0.002")
+  AIC        = c(204944.9, 204937.5),
+  `ΔAIC`     = c(7.4, 0.0),
+  `χ²`       = c("—", "9.457"),
+  df         = c("—", "1"),
+  `p-value`  = c("—", "0.002")
 ) %>%
   kable(
     format  = "simple",
-    caption = "Model comparison: baseline vs. count-specific interaction model",
     digits  = 1
   )
 ```
@@ -718,17 +724,19 @@ tibble(
 ```{r}
 #| echo: false
 #| label: tbl-leaderboard
-#| tbl-cap: "Table 4: Top and bottom 10 catchers by framing runs saved (2025 season)"
+#| tbl-cap: "Top and bottom 10 catchers by framing runs saved (2025 season)"
 
 leaderboard_table
 ```
+
+\newpage
 
 ## Figures
 
 ```{r}
 #| echo: false
 #| warning: false
-#| fig-cap: "Figure 1: Called strike rate by pitch location (2025 shadow zone). Solid box = strike zone, dashed box = shadow zone boundary. Interior of strike zone excluded by design."
+#| fig-cap: "Called strike rate by pitch location (2025 shadow zone). Solid box = strike zone, dashed box = shadow zone boundary. Interior of strike zone excluded by design."
 #| label: fig-heatmap
 #| fig-width: 6
 #| fig-height: 5
@@ -739,7 +747,7 @@ heatmap_plot
 ```{r}
 #| echo: false
 #| warning: false
-#| fig-cap: "Figure 2: Distribution of shadow zone pitches per catcher (2025 season). Dashed line indicates 300-pitch minimum threshold."
+#| fig-cap: "Distribution of shadow zone pitches per catcher (2025 season). Dashed line indicates 300-pitch minimum threshold."
 #| label: fig-pitchdist
 #| fig-width: 6
 #| fig-height: 4
@@ -750,7 +758,7 @@ pitchdist_plot
 ```{r}
 #| echo: false
 #| warning: false
-#| fig-cap: "Figure 3: Called strike rate by count in shadow zone (2025 season)."
+#| fig-cap: "Called strike rate by count in shadow zone (2025 season)."
 #| label: fig-countrate
 #| fig-width: 6
 #| fig-height: 5
@@ -761,7 +769,7 @@ countrate_plot
 ```{r}
 #| echo: false
 #| warning: false
-#| fig-cap: "Figure 4: Called strike rate by count and batter handedness (2025 shadow zone)."
+#| fig-cap: "Called strike rate by count and batter handedness (2025 shadow zone)."
 #| label: fig-handedness
 #| fig-width: 6
 #| fig-height: 5
@@ -773,7 +781,7 @@ handedness_plot
 #| echo: false
 #| warning: false
 #| label: fig-caterpillar
-#| fig-cap: "Figure 5: Catcher framing random effects with 90% confidence intervals (2025 season). Red points indicate catchers significantly different from zero."
+#| fig-cap: "Catcher framing random effects with 90% confidence intervals (2025 season). Red points indicate catchers significantly different from zero."
 #| fig-width: 7
 #| fig-height: 6
 
@@ -784,7 +792,7 @@ caterpillar_plot
 #| echo: false
 #| warning: false
 #| label: fig-runssaved
-#| fig-cap: "Figure 6: Catcher framing value for top and bottom 10 catchers (2025 season). Error bars show 90% confidence intervals."
+#| fig-cap: "Catcher framing value for top and bottom 10 catchers (2025 season). Error bars show 90% confidence intervals."
 #| fig-width: 7
 #| fig-height: 6
 
@@ -794,7 +802,7 @@ runssaved_plot
 ```{r}
 #| echo: false
 #| label: fig-count-effects
-#| fig-cap: "Figure 7: Top and bottom 15 catcher-by-count random effects (2025 season). Each point represents a catcher-count combination. Positive values indicate above-average framing in that count."
+#| fig-cap: "Top and bottom 15 catcher-by-count random effects (2025 season). Each point represents a catcher-count combination. Positive values indicate above-average framing in that count."
 #| fig-width: 7
 #| fig-height: 5
 
