@@ -5,7 +5,9 @@ date: 04/28/2026
 format: pdf
 ---
 
-Gen AI Usage Statement: This notebook was produced with the use of Claude Code for VS Code
+## AI Usage Statement
+
+Arthur used Claude Code in VS Code to generate blocking analysis code based on my model description and methods from the rough draft, an outline of the blocking analysis work to help structure my section's report content, and to merge file, outputs, and analysis structures for cohesiveness with my teammates. At all points I made the assumptions, choices, and interpretations myself based upon course materials, my own knowledge, and supporting research, while utilizing Claude Code to implement the designs. Because this was accomplished in VS Code only, I do not have a shareable conversation history link, so this is a summary of my AI usage to the best of my ability.
 
 # ── Load & Process the Data ────────────────────────────────────────────────────
 
@@ -961,6 +963,70 @@ block_savant_scatter_plot <- ggplot(comparison_df,
 block_savant_scatter_plot
 ```
 
+# ── VARIANCE COMPONENTS + FIXED EFFECTS TABLE ────────────────────────────────
+
+```{r}
+# variance components + key fixed effects table (report-ready)
+# Parallels Morgan's variance_fixed_table for framing.
+# Plain knitr::kable() with bold section-header rows (no kableExtra needed).
+
+# Random effects — as character so bind_rows with fixed effects is clean
+vc_rows <- as.data.frame(VarCorr(block_mod_final)) |>
+  filter(grp != "Residual") |>
+  transmute(
+    Term      = dplyr::recode(grp,
+                  catcher_id = "Catcher random intercept",
+                  pitcher_id = "Pitcher random intercept"),
+    Value     = as.character(round(vcov, 4)),
+    SE_SD     = as.character(round(sdcor, 4)),
+    `p-value` = "—"
+  )
+
+# Fixed effects
+fe    <- fixef(block_mod_final)
+se_fe <- sqrt(diag(vcov(block_mod_final)))
+p_fe  <- 2 * pnorm(abs(fe / se_fe), lower.tail = FALSE)
+
+fe_rows <- tibble(
+  Term      = names(fe),
+  Value     = as.character(round(fe, 3)),
+  SE_SD     = as.character(round(se_fe, 3)),
+  `p-value` = ifelse(p_fe < 0.001, "< 0.001", as.character(round(p_fe, 3)))
+) |>
+  mutate(
+    Term = gsub("scale\\(plate_z\\)",       "plate_z (std.)",        Term),
+    Term = gsub("scale\\(plate_x\\)",       "plate_x (std.)",        Term),
+    Term = gsub("scale\\(release_speed\\)", "release_speed (std.)",  Term),
+    Term = gsub("pitch_type_collapsed",     "Pitch type: ",          Term),
+    Term = gsub("^count",                   "Count: ",               Term),
+    Term = gsub("p_throwsR",                "Pitcher: right-handed", Term),
+    Term = gsub("^\\(Intercept\\)$",        "Intercept",             Term)
+  )
+
+# Section header helper — bold via LaTeX, blank numeric cells
+hdr <- function(label) {
+  tibble(Term = paste0("\\textbf{", label, "}"),
+         Value = "", SE_SD = "", `p-value` = "")
+}
+
+combined <- bind_rows(
+  hdr("Random Effects (Variance Components)"),
+  vc_rows,
+  hdr("Fixed Effects"),
+  fe_rows
+)
+
+block_variance_fixed_table <- knitr::kable(
+  combined,
+  col.names = c("Term", "Variance / Estimate", "SD / SE", "p-value"),
+  booktabs  = TRUE,
+  linesep   = "",
+  escape    = FALSE
+)
+
+block_variance_fixed_table
+```
+
 # ── SAVE MODELS FOR REPORT.QMD ───────────────────────────────────────────────
 
 ```{r}
@@ -969,6 +1035,7 @@ block_savant_scatter_plot
 # Run this chunk once after a successful top-to-bottom run.
 
 saveRDS(block_mod_full,                      "block_mod_full.rds")
+saveRDS(block_variance_fixed_table,          "block_variance_fixed_table.rds")
 saveRDS(catcher_effects_named,               "catcher_effects_named.rds")
 saveRDS(block_heatmap_plot,                  "block_heatmap_plot.rds")
 saveRDS(block_pitchdist_plot,                "block_pitchdist_plot.rds")
@@ -991,6 +1058,7 @@ cat("Saved all blocking RDS objects\n")
 # Run this chunk once after a successful top-to-bottom run (same session as
 # the RDS save chunk above, so all plot objects are in scope).
 
+#| eval: false
 ggsave("block_heatmap_plot.pdf",          block_heatmap_plot,        width = 6, height = 5)
 ggsave("block_pitchdist_plot.pdf",        block_pitchdist_plot,      width = 6, height = 4)
 ggsave("block_by_pitchtype_plot.pdf",     block_by_pitchtype_plot,   width = 6, height = 4)
