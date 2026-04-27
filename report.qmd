@@ -155,7 +155,7 @@ $$\text{Simple:}\quad \text{is\_block} \sim \text{plate\_x} + \text{plate\_z} +
 
 $$\text{Full:}\quad +\;\text{release\_speed} + \text{count} + \text{p\_throws}$$
 
-The full model achieved substantially lower AIC (61,287.6 vs. 61,972.9, $\Delta$AIC = 685.3; $\chi^2$(13) = 711.29, p < 2.2e-16) and was selected for all subsequent inference (@tbl-block-comparison).
+Models were compared via AIC and a likelihood ratio test to assess whether the additional covariates significantly improve fit.
 
 Catcher random effects are expressed as blocks above average per 100 opportunities (BAA/100). Let $\hat{\beta}_0$ denote the model intercept and $\hat{u}_j$ the estimated random effect for catcher $j$. The league baseline block probability is
 $\hat{p}_\text{base} = \text{logistic}(\hat{\beta}_0)$ and the
