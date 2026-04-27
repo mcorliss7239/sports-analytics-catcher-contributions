@@ -13,6 +13,12 @@ statcast_2025_raw.rds
 bootstrap_framing_50.rds
 framing_model.rds
 
+# Generated PDF build artifacts - never commit
+*.pdf
+*.aux
+*.log
+*.tex
+
 # Plot objects - allow these
 !heatmap_plot.rds
 !pitchdist_plot.rds
