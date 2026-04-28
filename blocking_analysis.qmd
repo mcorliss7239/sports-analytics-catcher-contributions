@@ -7,7 +7,9 @@ format: pdf
 
 ## AI Usage Statement
 
-Arthur used Claude Code in VS Code to generate blocking analysis code based on my model description and methods from the rough draft, an outline of the blocking analysis work to help structure my section's report content, and to merge file, outputs, and analysis structures for cohesiveness with my teammates. At all points I made the assumptions, choices, and interpretations myself based upon course materials, my own knowledge, and supporting research, while utilizing Claude Code to implement the designs. Because this was accomplished in VS Code only, I do not have a shareable conversation history link, so this is a summary of my AI usage to the best of my ability.
+Arthur used Claude Code in VS Code to generate blocking analysis code based on my model description and methods from the rough draft, an outline of the blocking analysis work to help structure my section's report content, and to merge file, outputs, and analysis structures for cohesiveness with my teammates. At all points I made the assumptions, choices, and interpretations myself based upon course materials, my own knowledge, and supporting research, while utilizing Claude Code to implement the designs.
+
+All code in this notebook was written with the help of Claude. An initial conversation about project planning occurred based on the data and my modeling goals and choices. The plan document and checklist was continuously updated and edited for subsequent conversation context. Code blocks were created individually as I worked through EDA and scoping to results organization and evaluation, and are organized with accompanying comments for clarity. Because this was accomplished in VS Code only, I do not have a shareable conversation history link, so this is a summary of my AI usage to the best of my ability.
 
 # ── Load & Process the Data ────────────────────────────────────────────────────
 
@@ -165,7 +167,6 @@ sum(grepl("passed ball", sc_2025_raw$des, ignore.case = TRUE), na.rm = TRUE)
 #   which shows block rate rising steeply beyond this depth. Pitches at
 #   0–0.3 ft below the zone have block rates near 0–2% and are likely
 #   received cleanly; the curve begins accelerating around 0.3 ft.
-#   Analogous to shadow_threshold in the framing model.
 #
 # Outcome: is_block == 1 if the pitch was recorded as a successful block
 #          (blocked_ball or swinging_strike_blocked); 0 otherwise.
@@ -198,7 +199,7 @@ blocking_df <- sc_2025_raw |>
 ```{r}
 # blocking opportunity sanity checks
 
-cat("Blocking opportunities (plate_z < sz_bot):", nrow(blocking_df), "\n")
+cat("Blocking opportunities (plate_z < sz_bot - 0.3):", nrow(blocking_df), "\n")
 cat("Successful blocks   (is_block == 1):", sum(blocking_df$is_block), "\n")
 cat("Non-blocks          (is_block == 0):", sum(blocking_df$is_block == 0), "\n")
 cat("Block rate:", round(mean(blocking_df$is_block), 3), "\n")
@@ -406,9 +407,8 @@ cat("Pitchers in blocking model:", n_distinct(blocking_model_df$pitcher_id), "\n
 # collapse rare pitch types into "Other" before modeling
 # Pitch types with fewer than 500 below-zone pitches are too sparse to
 # estimate reliably; collapsing avoids separation and unstable coefficients.
-# Note: swing removed as a predictor — swing==1 implies is_block==1 by
-# construction (swinging_strike_blocked is a success label), causing
-# quasi-complete separation and optimizer divergence.
+# swing removed as a predictor — swing==1 implies is_block==1 by
+# construction (swinging_strike_blocked is a success label)
 
 common_types <- blocking_model_df |>
   count(pitch_type) |>
@@ -450,7 +450,7 @@ summary(block_mod_simple)
 
 ```{r}
 # full blocking model
-# Adds: release_speed, count, p_throws (kept as candidate; model comparison decides)
+# Adds: release_speed, count, p_throws
 
 block_mod_full <- glmer(
   is_block ~ scale(plate_x) + scale(plate_z) + pitch_type_collapsed +
@@ -501,8 +501,7 @@ block_model_comparison_table <- tibble(
 
 block_model_comparison_table
 
-# Select the winning model for downstream use
-# Update this assignment after seeing AIC results
+# Select the winning model for downstream use (full model won)
 block_mod_final <- if (aic_comparison["block_mod_full", "AIC"] <
                        aic_comparison["block_mod_simple", "AIC"]) {
   block_mod_full
@@ -597,11 +596,9 @@ system.time({
 # uncertainty quantification: conditional SEs from arm::se.ranef()
 #
 # bootMer() timed at 422 sec/iteration — infeasible for B>=100.
-# Instead: arm::se.ranef() extracts the conditional SE for each catcher BLUP
-# from the curvature of the Laplace-approximated posterior. This is the
-# standard mixed-models approach when bootstrap is computationally prohibitive.
-# CIs = BLUP ± 1.645 * SE (90%). Treats variance parameters as known; slight
-# undercoverage for sparse catchers but appropriate for this sample size range.
+# Instead: arm::se.ranef() gives conditional SEs for each catcher's random
+# effect estimate. CIs = estimate ± 1.645 * SE (90%). Treats variance
+# components as fixed, so intervals are slightly narrow for sparse catchers.
 
 library(arm)
 
@@ -730,7 +727,7 @@ block_ridge_plot
 
 ```{r}
 # paginated caterpillar CI plots — 20 catchers per page, sorted best to worst
-# Full plot above is for the report; these are for legible inspection.
+# Both the full plot above and these pages are saved to RDS for report.qmd.
 
 page_size <- 20
 catcher_sorted <- catcher_effects_named |>
@@ -887,7 +884,7 @@ print(head(savant_raw))
 ```
 
 ```{r}
-# summary table: all eligible catchers, opportunities, and BAA/game estimate
+# summary table: all eligible catchers, opportunities, and BAA/100 estimate
 
 catcher_effects_named |>
   arrange(desc(baa_per_100)) |>
@@ -900,7 +897,7 @@ catcher_effects_named |>
 ```
 
 ```{r}
-# Join Savant rankings with our catcher effects by MLBAM player ID.
+# Join Savant rankings with my catcher effects by MLBAM player ID.
 # Savant column: blocks_above_average_per_game (per game caught, same 40-opp assumption).
 
 savant_blocking <- savant_raw |>
@@ -921,8 +918,8 @@ cat("Spearman rank correlation (our ranking vs. Savant):", round(rho, 3), "\n")
 ```
 
 ```{r}
-# opportunity comparison table: our n_opps vs. Savant pitch counts
-# Illustrates why scale comparison is invalid: our 0.3–1.5 ft filter
+# opportunity comparison table: my n_opps vs. Savant pitch counts
+# Illustrates why scale comparison is invalid: my 0.3–1.5 ft filter
 # yields far fewer opportunities than Savant's broader opportunity definition.
 
 block_opportunity_comparison_table <- comparison_df |>
@@ -939,7 +936,7 @@ block_opportunity_comparison_table
 ```
 
 ```{r}
-# scatter plot: our BAA/100 vs. Savant BAA/game
+# scatter plot: my BAA/100 vs. Savant BAA/game
 # Uses geom_text (check_overlap) — no ggrepel dependency.
 
 block_savant_scatter_plot <- ggplot(comparison_df,
@@ -1053,12 +1050,11 @@ cat("Saved all blocking RDS objects\n")
 ```
 
 ```{r}
-# Save blocking plots as PDF files so report.qmd can load them via
-# knitr::include_graphics() — avoids ggplot2 4.x S7/knitr incompatibility.
-# Run this chunk once after a successful top-to-bottom run (same session as
-# the RDS save chunk above, so all plot objects are in scope).
-
 #| eval: false
+# Old approach: save plots as PDFs for knitr::include_graphics().
+# Superseded by the RDS approach above — report.qmd loads plot objects
+# directly from RDS and prints them, so this chunk is no longer needed.
+# Kept here for reference.
 ggsave("block_heatmap_plot.pdf",          block_heatmap_plot,        width = 6, height = 5)
 ggsave("block_pitchdist_plot.pdf",        block_pitchdist_plot,      width = 6, height = 4)
 ggsave("block_by_pitchtype_plot.pdf",     block_by_pitchtype_plot,   width = 6, height = 4)
