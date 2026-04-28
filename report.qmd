@@ -124,7 +124,7 @@ where $p_i$ is the probability of a called strike on pitch $i$. Fixed effects co
 
 The model assumes $Y_i \sim \text{Bernoulli}(p_i)$, where the log-odds of a called strike are modeled as a linear function of fixed and random effects. Catcher, pitcher, and batter random effects are each assumed independently normally distributed with mean zero: $u_j \sim N(0, \sigma^2)$, independent of each other and of the fixed effect predictors. Shadow zone pitches are assumed conditionally independent given the random effects.
 
-A mixed-effects model was chosen over fixed effects because with 85 catchers, a fixed-effects approach would produce unreliable estimates for backup catchers with small sample sizes. The mixed-effects framework handles this through partial pooling, shrinking estimates for data-sparse catchers toward the league mean. Pitcher and batter random effects were included to avoid attributing their tendencies to catchers. The BOBYQA optimizer was specified for this model due to its large dataset size and complex random effect structure (Powell, 2009).
+A mixed-effects model was chosen over fixed effects because with 85 catchers, a fixed-effects approach would produce unreliable estimates for backup catchers with small sample sizes. The mixed-effects framework handles this through partial pooling, shrinking estimates for data-sparse catchers toward the league mean. Pitcher and batter random effects were included to avoid attributing their tendencies to catchers. The BOBYQA optimizer was used for this model due to the large size of the dataset and complex random effect structure (Powell, 2009).
 
 To evaluate the model, we fit a reduced specification excluding pitcher and batter random effects:
 
@@ -203,11 +203,11 @@ Uncertainty in random effect estimates is quantified using conditional standard 
 
 ### Model Comparison
 
-The full model achieved a substantially lower AIC (204,945) compared to the reduced model (205,241), a difference of 296 units. The likelihood ratio test confirms this improvement is statistically significant ($\chi^2$(2) = 300.25, p \< 2.2e-16), providing strong evidence that pitcher and batter random effects meaningfully improve model fit. Omitting them would bias catcher framing estimates by attributing pitcher and batter tendencies to catchers. The full model was therefore selected for all subsequent inference. These results are summarized in @tbl-model-comparison.
+The full model achieved a substantially lower AIC (204,945) compared to the reduced model (205,241), a difference of 296 units. The likelihood ratio test confirms this improvement is statistically significant (χ²(2) = 300.25, p \< 2.2e-16), providing strong evidence that pitcher and batter random effects meaningfully improve model fit. Omitting them would bias catcher framing estimates by attributing pitcher and batter tendencies to catchers. The full model was therefore selected for use. These results are summarized in @tbl-model-comparison.
 
 ### Model Interpretation
 
-@tbl-variance-fixed displays the variance components and key fixed effects. Catcher variance (0.006) is smaller than pitcher (0.013) and batter (0.016) variance, suggesting that pitch location and batter/pitcher context explain more variation in borderline calls than catcher framing alone. However, catcher variance is meaningfully non-zero, confirming that framing ability varies across catchers above and beyond these controls, directly supporting the motivation for this analysis.
+@tbl-variance-fixed displays the variance components and key fixed effects. Catcher variance (0.006) is smaller than pitcher (0.013) and batter (0.016) variance, suggesting that pitch location and batter/pitcher context explain more variation in borderline calls than catcher framing alone. However, catcher variance is meaningfully non-zero, confirming that framing ability varies across catchers, directly supporting the motivation for this analysis.
 
 Pitcher handedness was not significant (β = -0.012, p = 0.468) and was retained for completeness. Count coefficients were highly significant (p \< 2e-16), with 3-0 counts showing the highest tendency toward called strikes (β = 0.586) and 0-2 counts the lowest (β = -1.897). Right-handed batters received significantly more called strikes than left-handed batters (β = 0.140, p \< 2e-16), consistent with @fig-handedness.
 
@@ -363,17 +363,18 @@ Several extensions of this work would strengthen the conclusions. A year-to-year
 
 # References
 
-MLB.com. "Catcher Framing." *MLB Glossary*, Major League Baseball, https://www.mlb.com/glossary/statcast/catcher-framing. Accessed April 2026.
-
-MLB Advanced Media. "Catcher Framing Leaderboard." *Baseball Savant*, Major League Baseball, 2025. https://baseballsavant.mlb.com/catcher_framing. Accessed April 2026.
+Major League Baseball. *2026 Official Baseball Rules*, pg. 5. https://mktg.mlbstatic.com/mlb/official-information/2026-official-baseball-rules.pdf. Accessed April 2026.
 
 MLB Advanced Media. "Catcher Blocking Leaderboard." *Baseball Savant*, Major League Baseball, 2025. https://baseballsavant.mlb.com/leaderboard/catcher-blocking. Accessed April 2026.
 
+MLB Advanced Media. "Catcher Framing Leaderboard." *Baseball Savant*, Major League Baseball, 2025. https://baseballsavant.mlb.com/catcher_framing. Accessed April 2026.
+
 MLB Advanced Media. *Statcast Pitch-Level Data, 2025 MLB Regular Season.* Baseball Savant, Major League Baseball, 2025. https://baseballsavant.mlb.com/statcast_search. Accessed April 2026.
 
-Major League Baseball. *2026 Official Baseball Rules*, pg. 5. https://mktg.mlbstatic.com/mlb/official-information/2026-official-baseball-rules.pdf. Accessed April 2026.
+MLB.com. "Catcher Framing." *MLB Glossary*, Major League Baseball, https://www.mlb.com/glossary/statcast/catcher-framing. Accessed April 2026.
 
-Powell, M.J.D. "The BOBYQA Algorithm for Bound Constrained Optimization Without Derivatives." *Cambridge NA Report NA2009/06*, University of Cambridge, 2009. https://www.damtp.cam.ac.uk/user/na/NA_papers/NA2009_06.pdf. Accessed April 2026.
+Powell, M.J.D. "The BOBYQA Algorithm for Bound Constrained Optimization Without Derivatives." *Cambridge NA Report NA2009/06*, University of Cambridge, 2009.
+https://www.damtp.cam.ac.uk/user/na/NA_papers/NA2009_06.pdf. Accessed April 2026.
 
 
 \newpage
@@ -381,6 +382,8 @@ Powell, M.J.D. "The BOBYQA Algorithm for Bound Constrained Optimization Without 
 ## AI Usage Statement
 
 Arthur: I used Claude Code in VS Code to generate blocking analysis code based on my model description and methods from the rough draft, an outline of the blocking analysis work to help structure my report content, to remove extranneous words and sentences from my report sections so they fit within the length requirements, and to merge file, outputs, and analysis structures for cohesiveness with my teammates. At all points I made the assumptions, choices, and interpretations myself based upon course materials, my own knowledge, and supporting research, while utilizing Claude Code to implement the designs. Because this was accomplished in VS Code only, I do not have a shareable conversation history link of all prompts and responses, so this is a summary of my AI usage to the best of my ability. I also used the Grammarly Extension tool to edit and improve my writing for clarity and conciseness, and to fix grammatical errors.
+
+Morgan used Claude to assist with the following tasks: pulling and cleaning Statcast data from Baseball Savant, building and refining the mixed-effects framing model, generating EDA visualizations and report tables, debugging code errors, and editing report prose for clarity. All modeling decisions, interpretations, and conclusions are the author's own.
 
 \newpage
 
@@ -505,7 +508,6 @@ catcher_effects_named |>
 }
 ```
 
-\newpage
 ```{r}
 #| echo: false
 #| label: tbl-variance-components
@@ -518,7 +520,7 @@ catcher_effects_named |>
 }
 ```
 
-
+\newpage
 
 ## Figures
 

@@ -5,7 +5,7 @@ date: 04/28/2026
 format: pdf
 ---
 
-Gen AI Usage Statement: This notebook was produced with the aim of Claude Code for RStudio
+Gen AI Usage Statement: This notebook was produced with the aid of Claude Code in RStudio
 
 ```{r}
 #library() + load cached RDS (commented out)
@@ -487,7 +487,8 @@ catcher_ranef <- tidy(framing_model, effects = "ran_vals") %>%
     upper = estimate + 1.645 * std.error,
     level = fct_inorder(level),
     sig   = lower > 0 | upper < 0
-  )
+  ) %>%
+  mutate(level = as.character(level))
 ```
 
 
@@ -580,6 +581,8 @@ runs_saved <- catcher_ranef %>%
 ```
 
 ```{r}
+#| echo: false
+ 
 catcher_pitch_counts
 
 runs_saved
