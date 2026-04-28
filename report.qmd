@@ -83,7 +83,7 @@ We find that catcher identity explains meaningful variation in defensive outcome
 
 # Data
 
-Pitch-level Statcast data was accessed via Baseball Savant's CSV export API for the 2025 MLB regular season (March 27 – September 28, 2025), yielding 712,192 total pitches across 118 variables (MLB Advanced Media, 2025). Key variables include `plate_x` and `plate_z` (pitch coordinates at home plate), `sz_top` and `sz_bot` (batter-specific strike zone boundaries), `fielder_2` (catcher ID), `description` (called strike or ball), `balls`, `strikes`, `stand`, `pitch_type`, and `p_throws`. Pitch-level coordinate data is uniquely suited for framing analysis as it allows precise separation of where the pitch actually crossed the plate from how the catcher influenced the umpire's call. For blocking, the richness of pitch-level data by movement, location, pitcher and block label provide the information needed to separate catcher skill from pitch difficulty.
+Pitch-level Statcast data was accessed via Baseball Savant's CSV export API for the 2025 MLB regular season (March 27 – September 28, 2025), yielding 712,192 total pitches across 118 variables (MLB Advanced Media, 2025). Key variables include `plate_x` and `plate_z` (pitch coordinates at home plate), `sz_top` and `sz_bot` (batter-specific strike zone boundaries), `fielder_2` (catcher ID), `description` (called strike or ball), `balls`, `strikes`, `stand`, `pitch_type`, and `p_throws`. Pitch-level coordinate data is uniquely suited for framing analysis as it allows precise separation of where the pitch actually crossed the plate from how the catcher influenced the umpire's call.
 
 ## Preprocessing: Catcher Framing
 
@@ -329,9 +329,7 @@ consistent with his standing as the best framer in baseball.
 
 The blocking model confirms that catcher identity explains meaningful
 variation in recorded block rates above and beyond pitch difficulty.
-Patrick Bailey again leads at +4.04 blocks above average per 100
-opportunities, while Agustín Ramírez ranks last at −2.92, a spread of
-roughly 7 BAA/100 across 88 catchers. Notably, pitcher-level variance
+Notably, pitcher-level variance
 (0.062) exceeds catcher-level variance (0.035), indicating that pitcher
 tendencies to miss below the zone explain more variation in recorded
 block rate than catcher differences alone.
@@ -351,13 +349,13 @@ differ substantially across catchers.
 
 Several limitations of this analysis should be noted. First, the shadow zone threshold of 0.242 ft is derived from the average baseball diameter per the 2026 Official Baseball Rules and a robustness check with alternative values would strengthen this analysis. Second, this analysis is based on a single season of data, framing estimates from one season may reflect some noise. Conducting an analysis of different years would help verify our conclusions. Uncertainty is quantified via conditional standard errors, which assume the model is correctly specified, a bootstrap approach would provide more robust intervals but was proving computationally infeasible.
 
-The blocking analysis has three key limitations. First, is_block = 0 conflates clean receives with missed blocks. The official WP/PB outcomes are too sparse to distinguish reliably, and many mishandled pitches are never scored as official failures. Second, the below-zone filter is a practical approximation and may exclude some horizontally difficult pitches, or include low pitches that were easy to receive. Third, the model is limited to publicly available pitch-level variables and cannot incorporate catcher starting position, body orientation, or other tracking inputs used in proprietary models like Baseball Savant's.
+The blocking analysis has three key limitations. First, is_block = 0 conflates clean receives with missed blocks. Second, the below-zone filter is a practical approximation and may exclude some horizontally difficult pitches, or include low pitches that were easy to receive. Third, the model is limited to publicly available pitch-level variables and cannot incorporate catcher starting position, body orientation, or other tracking inputs used in proprietary models like Baseball Savant's.
 
 The context dependent framing analysis has two notable limitations. First, while the catcher by pitch type interaction is statistically overwhelming, individual per cell estimates remain noisy because sample sizes per catcher per pitch type are uneven. Aggregate variance components are reliable but specific catcher rankings within pitch types should be interpreted with caution. Second, uncertainty quantification relies on conditional standard errors, which assume correct model specification, rather than a bootstrap approach that proved computationally infeasible within the project timeline.
 
 ## Future Work
 
-Several extensions of this work would strengthen the conclusions. A year-to-year stability check using 2024 data would test whether catcher rankings are consistent across seasons. A high correlation would confirm our models measure real defensive skill rather than single-season noise. The same check applied to the pitch type interaction would test whether catcher specialization patterns are stable. Cross validation alongside AIC and likelihood ratio tests would provide additional evidence on out-of-sample performance for our models. A throwing component based on stolen base data retrieved from a separate Statcast endpoint would complete the three-pillar defensive framework. Finally, future work should convert all metrics to a fielding run value for a unified evaluation and interpretation.
+A year-to-year stability check using 2024 data would test whether catcher rankings are consistent across seasons. Applied to the pitch type interaction, this would test whether catcher specialization patterns are stable. Cross validation alongside AIC and likelihood ratio tests would provide additional evidence on out-of-sample performance for our models. A throwing component based on stolen base data would complete the three-pillar defensive framework. Finally, future work should convert all metrics to a fielding run value for a unified evaluation and interpretation.
 
 \newpage
 
@@ -452,6 +450,7 @@ leaderboard_table
   tbl <- block_model_comparison_table
   attr(tbl, "caption") <- NULL
   tbl <- gsub("\\\\caption\\{(?:[^{}]|\\{[^}]*\\})*\\}\\n?", "", tbl, perl = TRUE)
+  tbl <- gsub("(?m)^Table:.*\n?", "", tbl, perl = TRUE)
   tbl
 }
 ```
@@ -490,6 +489,7 @@ catcher_effects_named |>
   tbl <- block_opportunity_comparison_table
   attr(tbl, "caption") <- NULL
   tbl <- gsub("\\\\caption\\{(?:[^{}]|\\{[^}]*\\})*\\}\\n?", "", tbl, perl = TRUE)
+  tbl <- gsub("(?m)^Table:.*\n?", "", tbl, perl = TRUE)
   tbl
 }
 ```
